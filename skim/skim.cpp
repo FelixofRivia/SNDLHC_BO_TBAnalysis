@@ -39,7 +39,7 @@ struct config_t {
 
   // geometry parameters
   double SCIFIDIM{-1};
-}
+};
 
 static constexpr config_t config_tb{4, 5, 3, 35, 5, 30, 30, 5, 1, 1, 13};
 static constexpr config_t config_ti18{5, 8, 5, 56, -1, -1, 2, 2, 3, -1, -1};

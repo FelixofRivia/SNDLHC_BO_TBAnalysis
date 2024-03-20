@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-This program takes care of skimming of DTNtuples:
+This program takes care of skimming of SND converted data:
 - it checks for the presence of already skimmed files
 - it allows parallel skimming using HTCondor
 - it provides a status summary of the skim process
@@ -8,7 +8,7 @@ This program takes care of skimming of DTNtuples:
 
 import argparse
 from datetime import datetime
-from os import path, makedirs 
+from os import path, makedirs, getcwd 
 from sys import exit
 import subprocess
 import glob
@@ -17,11 +17,15 @@ import glob
 # Variables
 #----------------
 
-DEBUG = False
+DEBUG = True
 
 FILES_PER_BLOCK = 5
 
-EOS_BASE_FOLDER = "/eos/user/c/cbattila/snd_analysis/"
+USER = "f/fmei"
+
+SCRIPT_DIRECTORY = getcwd() 
+
+EOS_BASE_FOLDER = f"/eos/user/{USER}/snd_analysis/"
 
 INPUT_FOLDERS = { "TB" : "/eos/experiment/sndlhc/convertedData/commissioning/testbeam_June2023_H8/",
                   "TI18" : "/eos/experiment/sndlhc/convertedData/physics/2023/"}
@@ -52,10 +56,11 @@ def condor_create_sh(job_folder, files, out_folder, i_block):
     sh_file = open(sh_file_name,"w")
 
     sh_file.write("#! /usr/bin/bash\n")
-    sh_file.write("cd /afs/cern.ch/user/c/cbattila/private/\n")
+    sh_file.write(f"SNDLHC_soft=/afs/cern.ch/user/{USER}/private/sndas\n")
+    sh_file.write("export ALIBUILD_WORK_DIR=$SNDLHC_soft/sw\n")
     sh_file.write("source /cvmfs/sndlhc.cern.ch/SNDLHC-2023/Aug30/setUp.sh\n")
-    sh_file.write("eval `alienv load sndsw/latest`\n")
-    sh_file.write("cd /afs/cern.ch/user/c/cbattila/private/sndlhc_bo_tbanalysis/skim/\n")
+    sh_file.write("eval `alienv load --no-refresh sndsw/latest`\n")
+    sh_file.write(f"cd {SCRIPT_DIRECTORY}\n")
 
     for file in files:
         command = ["./run_skim.sh", 
@@ -163,7 +168,7 @@ if __name__ == '__main__':
                         help="run number to be analysed")
     
     PARSER.add_argument("type",
-                        help="run number to be analysed")
+                        help="Either: 'TB' or 'TI18'")
 
     ARGS = PARSER.parse_args()
 
@@ -201,4 +206,3 @@ if __name__ == '__main__':
         condor_skim(job_folder, ARGS.run_number, ARGS.type)
     elif ARGS.command == "status":
         status(ARGS.run_number, ARGS.type)
-        
