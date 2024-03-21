@@ -59,5 +59,6 @@ ratio.Draw("colz")
 ROOT.gStyle.SetOptStat("ne")
 canvases[4].Write()
 
+en_dist.Write()
 # Close the ROOT file
 root_file.Close()

@@ -91,9 +91,31 @@ def condor_create_jdl(job_folder, sh_file_name, i_block):
 
     return jdl_file_name
 
-def condor_skim_command(jdl_file_name):
+def condor_create_sub(job_folder, sh_file_name, i_block):
 
-    command = ["condor_submit", jdl_file_name]
+    sub_file_name = path.join(job_folder, f"run_skim_{i_block}.sub")
+    sub_file = open(sub_file_name, "w")
+
+    sub_file.write(f"executable = {sh_file_name}\n")
+    sub_file.write("getenv = False\n")
+    sub_file.write("notification = Never\n")
+    sub_file.write("requirements = (OpSysAndVer =?= 'AlmaLinux9')\n")
+    sub_file.write("should_transfer_files = IF_NEEDED\n")
+    sub_file.write("+JobFlavour = 'workday'\n")
+    sub_file.write("+AccountingGroup = 'group_u_SNDLHC.users'\n")
+    sub_file.write(f"output = {job_folder}/condor_{i_block}_$(Cluster)_$(Process).out\n")
+    sub_file.write(f"error  = {job_folder}/condor_{i_block}_$(Cluster)_$(Process).err\n")
+    sub_file.write(f"log    = {job_folder}/condor_{i_block}_$(Cluster)_$(Process).log\n")
+    sub_file.write("queue 1\n")
+
+    sub_file.close()
+
+    return sub_file_name
+
+def condor_skim_command(sub_file_name):
+
+    #command = ["condor_submit", jdl_file_name]
+    command = ["condor_submit", sub_file_name]
 
     process = subprocess.Popen(command, stdout=subprocess.PIPE)
     output, error = process.communicate()
@@ -124,12 +146,13 @@ def condor_skim(job_folder, run, type):
         sh_file_name = condor_create_sh(job_folder, file_block, out_folder, i_block)
         
         if DEBUG:
-            print(f"[condor_skim] creating condor .jdl file for .sh script # {i_block}.")
-        jdl_file_name = condor_create_jdl(job_folder, sh_file_name, i_block)
+            print(f"[condor_skim] creating condor .sub file for .sh script # {i_block}.")
+        #jdl_file_name = condor_create_jdl(job_folder, sh_file_name, i_block)
+        sub_file_name = condor_create_sub(job_folder, sh_file_name, i_block)
         
         if DEBUG:
-            print(f"[condor_skim] running condor_submit for .jdl file # {i_block}.")
-        condor_skim_command(jdl_file_name)
+            print(f"[condor_skim] running condor_submit for .sub file # {i_block}.")
+        condor_skim_command(sub_file_name)
 
         print(f"Submitted job [{i_block:3} / {len(file_blocks)}]")
     return
