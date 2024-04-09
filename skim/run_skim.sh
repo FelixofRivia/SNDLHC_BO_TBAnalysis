@@ -12,4 +12,10 @@ isTB=$3
 
 
 # Define an array of commands
-root -l -x -b -q "skim.cpp(\"$INPUT_FILE\", \"$OUTPUT_FOLDER\", $isTB);"
+root -l -b -x <<EOF
+.L libs/SciFiPlaneView.cpp
+.L libs/USPlaneView.cpp
+.L skim.cpp
+skim("$INPUT_FILE", "$OUTPUT_FOLDER", $isTB)
+.q
+EOF
