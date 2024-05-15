@@ -21,14 +21,24 @@ DEBUG = True
 
 FILES_PER_BLOCK = 5
 
-USER = "f/fmei"
-
 SCRIPT_DIRECTORY = getcwd() 
 
-EOS_BASE_FOLDER = f"/eos/user/{USER}/snd_analysis/"
+# USER = "f/fmei"
+
+# EOS_BASE_FOLDER = { "TB" : f"/eos/user/{USER}/snd_analysis/TB/",
+#                     "TI18_2022" : f"/eos/user/{USER}/snd_analysis/TI18/",
+#                     "TI18_2023" : f"/eos/user/{USER}/snd_analysis/TI18/"}
+
+USER = "g/gpsndlhc"
+
+EOS_BASE_FOLDER = { "TB" : f"/eos/user/{USER}/skimResults/TB/",
+                    "TI18_2022" : f"/eos/user/{USER}/skimResults/TI18/",
+                    "TI18_2023" : f"/eos/user/{USER}/skimResults/TI18/"}
+
 
 INPUT_FOLDERS = { "TB" : "/eos/experiment/sndlhc/convertedData/commissioning/testbeam_June2023_H8/",
-                  "TI18" : "/eos/experiment/sndlhc/convertedData/physics/2023/"}
+                  "TI18_2022" : "/eos/experiment/sndlhc/convertedData/physics/2022/",
+                  "TI18_2023" : "/eos/experiment/sndlhc/convertedData/physics/2023/"}
 
 #-----------------
 # Helper functions
@@ -50,13 +60,13 @@ def non_skimmed_files(in_folder, out_folder):
 
     return results
 
-def condor_create_sh(job_folder, files, out_folder, i_block, type):
+def condor_create_sh(job_folder, files, out_folder, i_block, type, run_number):
 
     sh_file_name = path.join(job_folder, f"run_skim_{i_block}.sh")
     sh_file = open(sh_file_name,"w")
 
     sh_file.write("#! /usr/bin/bash\n")
-    sh_file.write(f"SNDLHC_soft=/afs/cern.ch/user/{USER}/private/sndas\n")
+    sh_file.write(f"SNDLHC_soft=/afs/cern.ch/user/f/fmei/private/sndas\n")
     sh_file.write("export ALIBUILD_WORK_DIR=$SNDLHC_soft/sw\n")
     sh_file.write("source /cvmfs/sndlhc.cern.ch/SNDLHC-2023/Aug30/setUp.sh\n")
     sh_file.write("eval `alienv load --no-refresh sndsw/latest`\n")
@@ -69,6 +79,7 @@ def condor_create_sh(job_folder, files, out_folder, i_block, type):
     for file in files:
         command = ["./run_skim.sh", 
                    f"{file}",
+                   f"{run_number}",
                    f"{out_folder}",
                    f"{isTB}",
                    "\n"]
@@ -138,7 +149,7 @@ def condor_skim_command(sub_file_name):
 def condor_skim(job_folder, run, type):
 
     in_folder = path.join(INPUT_FOLDERS[type],"run_" + f"{run}".rjust(6,"0"))
-    out_folder = path.join(EOS_BASE_FOLDER, f"{type}/run_" + f"{run}".rjust(6,"0"))
+    out_folder = path.join(EOS_BASE_FOLDER[type], "run_" + f"{run}".rjust(6,"0"))
 
     files_tbp = non_skimmed_files(in_folder,out_folder)
     file_blocks = [files_tbp[i_file:i_file + FILES_PER_BLOCK] for i_file in range(0, len(files_tbp), FILES_PER_BLOCK)]
@@ -147,7 +158,7 @@ def condor_skim(job_folder, run, type):
         
         if DEBUG:
             print(f"[condor_skim] creating .sh script for file block # {i_block}.")
-        sh_file_name = condor_create_sh(job_folder, file_block, out_folder, i_block, type)
+        sh_file_name = condor_create_sh(job_folder, file_block, out_folder, i_block, type, run)
         
         if DEBUG:
             print(f"[condor_skim] creating condor .sub file for .sh script # {i_block}.")
@@ -164,7 +175,7 @@ def condor_skim(job_folder, run, type):
 def status(run, type):
     
     in_folder = path.join(INPUT_FOLDERS[type],f"run_" + f"{run}".rjust(6,"0"))
-    out_folder = path.join(EOS_BASE_FOLDER, f"{type}/run_" +  f"{run}".rjust(6,"0"))
+    out_folder = path.join(EOS_BASE_FOLDER[type], f"run_" +  f"{run}".rjust(6,"0"))
 
     if not path.isdir(out_folder):
         print(f"[status] folder : {out_folder} does not exist.")
@@ -204,19 +215,28 @@ if __name__ == '__main__':
     #----------------
 
     COMMANDS = ["condor_skim", "status"]
+    run_type = ""
+
+    if "TI18" in ARGS.type:
+        if int(ARGS.run_number) < 5422:
+            run_type = "TI18_2022"
+        else:
+            run_type = "TI18_2023"
+    else:
+        run_type = ARGS.type
 
     if ARGS.command not in COMMANDS:
         print(f"[generic] command : {ARGS.command} must be either in: {COMMANDS}.")
         exit(100)
 
-    if ARGS.type not in INPUT_FOLDERS.keys():
-        print(f"[generic] command : {ARGS.type} must be either in: {INPUT_FOLDERS.keys()}.")
+    if run_type not in INPUT_FOLDERS.keys():
+        print(f"[generic] command : {run_type} must be either in: {INPUT_FOLDERS.keys()}.")
         exit(100)
 
 
     job_time = datetime.now().strftime("%d%m%Y_%H%M%S")
     job_folder = path.join("./jobs", "run_"+ f"{ARGS.run_number}".rjust(6,"0") + f"_{ARGS.type}_{job_time}")
-    skim_folder = path.join(EOS_BASE_FOLDER, f"{ARGS.type}/run_" + f"{ARGS.run_number}".rjust(6,"0"))
+    skim_folder = path.join(EOS_BASE_FOLDER[run_type], "run_" + f"{ARGS.run_number}".rjust(6,"0"))
 
     OUT_FOLDERS = []
     
@@ -230,6 +250,6 @@ if __name__ == '__main__':
             makedirs(folder_path)
 
     if ARGS.command == "condor_skim":
-        condor_skim(job_folder, ARGS.run_number, ARGS.type)
+        condor_skim(job_folder, ARGS.run_number, run_type)
     elif ARGS.command == "status":
-        status(ARGS.run_number, ARGS.type)
+        status(ARGS.run_number, run_type)

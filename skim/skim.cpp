@@ -11,6 +11,7 @@
 
 #include "TChain.h"
 #include "TClonesArray.h"
+#include "SNDLHCEventHeaderConst.h"
 #include "./libs/Inclusion.h"
 #include "./libs/SciFiPlaneView.h"
 #include "./libs/USPlaneView.h"
@@ -96,11 +97,34 @@ std::vector<SciFiPlaneView> fillSciFi(cfg configuration, TClonesArray *sf_hits){
 bool vetoCut(TClonesArray *mufi_hits){
 
   int n_mufi_hits{mufi_hits->GetEntries()};
-  //skip veto/beam monitor
-  for (int i{0}; i<n_mufi_hits; ++i){
-    if (static_cast<MuFilterHit *>(mufi_hits->At(i))->GetSystem() == 1) return false;
+  int system{0};
+  // skip veto/beam monitor
+  for (int i{0}; i<n_mufi_hits && system<2; ++i){
+    system = static_cast<MuFilterHit *>(mufi_hits->At(i))->GetSystem();
+    if (system == 1) return false;
   }
   return true;
+}
+
+bool isOneVetoHit(TClonesArray *mufi_hits){
+
+  int n_mufi_hits{mufi_hits->GetEntries()};
+  int system{0};
+  int n_hits{0};
+  // skip veto/beam monitor
+  for (int i{0}; i<n_mufi_hits && system<2; ++i){
+    system = static_cast<MuFilterHit *>(mufi_hits->At(i))->GetSystem();
+    if (system == 1) {
+      n_hits++;
+      if (n_hits>1) return false;
+    }
+  }
+  return n_hits==1 ? true : false;
+}
+
+bool isStableBeam(SNDLHCEventHeader *header){
+
+  return (header->GetBeamMode() == static_cast<int>(LhcBeamMode::StableBeams)) ? true : false;
 }
 
 void timeCutGuil (std::vector<SciFiPlaneView> &Scifi) {
@@ -135,10 +159,14 @@ int checkShower_with_density(std::vector<SciFiPlaneView> scifi_planes ) {
   return -1;
 }
 
-bool skim_function(cfg configuration, TClonesArray *sf_hits, TClonesArray *mufi_hits) {
-  //No hit in Veto
+bool skim_function(cfg configuration, SNDLHCEventHeader *header, TClonesArray *sf_hits, TClonesArray *mufi_hits) {
+  // Stable beam
+  if (!isStableBeam(header)) return false;
+  // No hit in Veto
   if (!vetoCut(mufi_hits)) return false;
-  //Shower tagged
+  // One hit in Veto
+  // if (!isOneVetoHit(mufi_hits)) return false;
+  // Shower tagged
   auto scifi_planes = fillSciFi(configuration, sf_hits);
   timeCutGuil(scifi_planes);
   if (checkShower_with_density(scifi_planes) == -1) return false;
@@ -150,14 +178,14 @@ bool skim_function(cfg configuration, TClonesArray *sf_hits, TClonesArray *mufi_
 // Steering function called by run_skim.sh
 //*****************************************************
 
-void skim(std::string file_name, std::string out_folder, bool isTB) {
+void skim(std::string file_name, int run_number, std::string out_folder, bool isTB) {
 
   auto start = std::chrono::steady_clock::now();
 
   std::cout << "[skim] processing: " << file_name << std::endl;
 
   // ##################### Set right parameters for data type (TB/TI18)
-  cfg configuration = setCfg(isTB, 5580); // placeholder runnumber
+  cfg configuration = setCfg(isTB, run_number); 
 
   // ##################### Read input file #####################
   auto tree = new TChain("rawConv");
@@ -167,7 +195,12 @@ void skim(std::string file_name, std::string out_folder, bool isTB) {
   auto sf_hits = new TClonesArray("sndScifiHit");
   auto mu_hits = new TClonesArray("MuFilterHit");
 
-  tree->SetBranchAddress("EventHeader.", &header);
+  if (!isTB && run_number<5422){
+    tree->SetBranchAddress("EventHeader", &header);
+  }
+  else {
+    tree->SetBranchAddress("EventHeader.", &header);
+  }
   tree->SetBranchAddress("Digi_ScifiHits", &sf_hits);
   tree->SetBranchAddress("Digi_MuFilterHits", &mu_hits);
 
@@ -189,7 +222,7 @@ void skim(std::string file_name, std::string out_folder, bool isTB) {
 
     tree->GetEntry(i);
 
-    if (skim_function(configuration, sf_hits, mu_hits)) {
+    if (skim_function(configuration, header, sf_hits, mu_hits)) {
       new_tree->Fill();
     }
   }

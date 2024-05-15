@@ -3,7 +3,7 @@
 #include <TKey.h>
 #include <TList.h>
 
-void testM(int runN, bool isTB) {
+void merge(int runN, bool isTB) {
     //std::vector<const char*> fileNames;
     char* outputFileName;
 

@@ -10,13 +10,13 @@ runN=$1 # read from the input_args.txt
 nFiles=$2 # read from the input_args.txt
 isTB=$3 # read from the input_args.txt
 
-echo "runAnalysis($runN, $nFiles, $isTB)"
+echo "runAnalysis($runN, $nFiles, $isTB, false, -1)"
 
 root -l -b -x <<EOF
 .L SciFiPlaneView.cpp
 .L USPlaneView.cpp
 .L ConvertedDataAnalyser.cpp
-runAnalysis($runN, $nFiles, $isTB)
+runAnalysis($runN, $nFiles, $isTB, false, -1)
 .q
 EOF
 
