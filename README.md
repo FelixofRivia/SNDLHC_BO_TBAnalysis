@@ -49,3 +49,8 @@ e.g. source multicoreGiulia 100639 15 true to analyse 15 files of run 100639 of 
 
 ### Summary:
 The provided code is a comprehensive script for analyzing SND@LHC data. It encompasses data loading, processing, analysis, and result visualization. The script is structured and modular, making it easy to extend or modify for different analysis requirements.
+
+### Configuration Setup (`setCfg`):
+- This function sets up the configuration parameters based on whether the data is from a test beam (`isTB`) or from physics runs.
+- It initializes various parameters such as the number of stations, time cuts, input/output file paths, etc., depending on the type of run.
+
