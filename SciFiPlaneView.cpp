@@ -233,6 +233,44 @@ void SciFiPlaneView::findCentroid(int windowSize) {
   slide(qdc.y, centroid.y);
 }
 
+bool SciFiPlaneView::evaluateNeighboringHits(int clustermaxsize, int max_miss) const {
+    auto slide = [&](const std::vector<double> &qdcarr, int n) {
+        if (n > clustermaxsize || n == 0) {
+            return false;
+        }
+
+        int hits{0};
+        int miss{0};
+
+        for (int i{0}; i < qdcarr.size(); ++i) {
+            if (qdcarr[i] == DEFAULT) {
+                if (hits > 0) {
+                    miss++;
+                    if (miss > max_miss) {
+                        return false;
+                    }
+                }
+            }
+            else {
+                hits++;
+                if (hits + miss > clustermaxsize) {
+                    return false;
+                }
+                if (n == hits) {
+                    return true;
+                }
+            }
+        }
+        return true;
+    };
+
+    int sizeX = sizes().x;
+    int sizeY = sizes().y;
+
+    return slide(qdc.x, sizeX) && slide(qdc.y, sizeY);
+}
+
+
 
 void SciFiPlaneView::resetHit( bool isVertical, int index){
     if (isVertical) {

@@ -40,7 +40,6 @@ else
     runAnalysis(5152, 40, false, true, 781267)
     runAnalysis(5171, 18, false, true, 810277)
     runAnalysis(5180, 30, false, true, 578821)
-    runAnalysis(5239, 174, false, true, 814223)
     runAnalysis(5389, 50, false, true, 929436)
     runAnalysis(5981, 18, false, true, 71685)
     runAnalysis(6050, 177, false, true, 763312)

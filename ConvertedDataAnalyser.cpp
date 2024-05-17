@@ -380,7 +380,7 @@ void fillPlots (std::vector<SciFiPlaneView> &Scifi_detector, std::vector<USPlane
   std::cout<<"SciFi:\t"<<partialScifiQDCSum*0.063194<<"\t US:\t"<<USQDCSum*0.0130885<<"\t Tot Energy:\t"<<partialScifiQDCSum*0.063194 + USQDCSum*0.0130885<<"\n";
 }
 
-void runAnalysis(int runNumber, int nFiles, bool isTB, bool isMulticore = false, int target = -1) //(int runN, int partN)
+void runAnalysis(int runNumber, int nFiles, bool isTB, bool isMulticore = false, int target = -1)
 {
 
   auto start = std::chrono::system_clock::now();
@@ -461,6 +461,7 @@ void runAnalysis(int runNumber, int nFiles, bool isTB, bool isMulticore = false,
   const float TDC2ns{1000/160.316};
   double last_timestamp{-1};
   bool is_one_hit = true;
+  bool is_one_cluster = true;
   bool is_apart = true;
   int first{target};
   int last{target+1};
@@ -472,7 +473,7 @@ void runAnalysis(int runNumber, int nFiles, bool isTB, bool isMulticore = false,
     first = 0;
     last = iMax;
   }
-  //for ( int m = 0; m < iMax; m++ ){ 
+
   for ( int m = first; m < last; m++ ){ 
     //if (m % 100 == 0) std::cout << "Processing event: " << m << '\r' << std::flush;
     //if (m >1000) break;
@@ -510,10 +511,11 @@ void runAnalysis(int runNumber, int nFiles, bool isTB, bool isMulticore = false,
     fillPlots(scifi_planes, us_planes, plots, tags[0], showerStart);
 
     std::vector<int> sh_start(6, -2);
+    double refT = timeCutGuil(scifi_planes, us_planes);
     //After cut
-    is_one_hit = hitCut(scifi_planes);
-    if (is_one_hit) {
-      timeCut(scifi_planes, us_planes);
+    //is_one_hit = hitCut(scifi_planes);
+    is_one_cluster = scifi_planes[0].evaluateNeighboringHits(3,1);
+    if (is_one_cluster && is_apart) {
       sh_start[0] = checkShower_with_clusters(scifi_planes);
       sh_start[1] = checkShower_with_density(scifi_planes);
       sh_start[2] = checkShower_with_F(scifi_planes);
@@ -522,12 +524,10 @@ void runAnalysis(int runNumber, int nFiles, bool isTB, bool isMulticore = false,
       plots[Form("%s_ShowerStart_with_density", tags[1].c_str())]->Fill(sh_start[1]);
       plots[Form("%s_ShowerStart_with_F", tags[1].c_str())]->Fill(sh_start[2]);
       for (auto &plane : scifi_planes) plane.findCentroid(6);
-      fillPlots(scifi_planes, us_planes, plots, tags[1], sh_start[0]);
-
+      fillPlots(scifi_planes, us_planes, plots, tags[1], sh_start[1]);
     }
 
     if (is_apart) {
-      double refT = timeCutGuil(scifi_planes_guil, us_planes_guil);
       sh_start[3] = checkShower_with_clusters(scifi_planes_guil);
       sh_start[4] = checkShower_with_density(scifi_planes_guil);
       sh_start[5] = checkShower_with_F(scifi_planes_guil);
