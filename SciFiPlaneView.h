@@ -56,6 +56,7 @@ public:
   const xy_pair<std::vector<double>> getQDC() const;
   const xy_pair<double> getTotQDC() const;
   const xy_pair<int>  getClusterSize() const;
+  bool evaluateNeighboringHits(int clustermaxsize, int max_miss) const;
 
   void findCluster();
   bool infoCluster();

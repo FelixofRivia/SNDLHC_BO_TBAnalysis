@@ -1,363 +1,524 @@
-void calibration() {
+const int N_ENERGIES = 5;
+const int N_SH_STARTS = 3;
 
-  const int NENERGIES = 5;
-  const double k_fix = 0.063194; //0.0617134; //0.0579034
-  const double alpha_fix = 0.0130885; //0.0111385; //0.010421
-  double mean_k = 0;
-  double mean_a = 0;
-  std::array<int, NENERGIES> energies = {100,140,180,240,300};
-  std::array<int, NENERGIES> runs = {100677,100633,100671,100648,100639}; // test: {100631,100673,100672,100647,100645} calib: {100677,100633,100671,100648,100639};
-  std::array<double, NENERGIES*3> xmax = {5000,6000,7000, 8000,8000,9000, 10000,11000,12000, 12000,12000,14000, 13500,15000,15000}; //{4000,6000,7000, 8000,8000,9000, 10000,11000,12000, 12000,12000,14000, 14000,14000,15000};
-  std::array<double, NENERGIES*3> xmin = {500,1000,2500, 1000,1000,3000, 1000,1000,4000, 1000,1000,4000, 1500,3000,6000}; // {500,500,500, 1000,1000,1500, 1000,1000,1500, 1000,1000,2500, 2000,1000,2500}; 
-  std::array<double, NENERGIES*3> amax = {27,25,22, 21,21,20, 21,21,20, 21,21,25, 21,21,25}; //{25,25,20, 25,25,20, 25,25,20, 20,20,23, 25,25,25};
-  std::array<double, NENERGIES*3> amin = {3,3,5, 3,3,10, 3,3,10, 3,3,12, 3,3,15}; // *0.001 {-3,-3,1, -5,-5,6, -5,-5,8, -5,0,8, -5,0,15};
-  TFile* indata[NENERGIES];
-  TGraphErrors* graph[3];
-  TGraphErrors* gAlpha[3];
-  TGraphErrors* gEn[3];
-  TGraphErrors* gEnrel[3];
-  TGraphErrors* gErr[3];
-  TGraphErrors* gK[3];
-  TGraphErrors* gUS[3];
-  for (int k{0}; k<3; ++k) {
-    graph[k] = new TGraphErrors();
-    graph[k]->SetTitle(Form("start_in_SciFi%i",k+2));
-    gAlpha[k] = new TGraphErrors();
-    gAlpha[k]->SetTitle(Form("start_in_SciFi%i",k+2));
-    gK[k] = new TGraphErrors();
-    gK[k]->SetTitle(Form("start_in_SciFi%i",k+2));
-    gEn[k] = new TGraphErrors();
-    gEn[k]->SetTitle(Form("start_in_SciFi%i",k+2));
-    gEnrel[k] = new TGraphErrors();
-    gEnrel[k]->SetTitle(Form("start_in_SciFi%i",k+2));
-    gErr[k] = new TGraphErrors();
-    gErr[k]->SetTitle(Form("start_in_SciFi%i",k+2));
-    gUS[k] = new TGraphErrors();
-    gUS[k]->SetTitle(Form("start_in_SciFi%i",k+2));
+std::array<int, N_ENERGIES> ENERGIES = {100,140,180,240,300};
+std::array<int, N_ENERGIES> RUNS_CALIB = {100677,100633,100671,100648,100639};
+std::array<int, N_ENERGIES> RUNS_TEST = {100631,100673,100672,100647,100645};
+
+std::array<double, N_ENERGIES*3> X_MAX = {4500,5000,6500, 5500,7000,8500, 8000,8500,10000, 10000,11000,13000, 11000,12000,14000}; 
+std::array<double, N_ENERGIES*3> X_MIN = {1000,1500,4000, 2000,3000,5000, 2000,3500,6000, 2500,4000,8500, 3000,5000,9500};
+
+/*
+std::array<double, N_ENERGIES*3> X_MAX = {6000,7000,8000, 8000,8500,10500, 11000,12000,13000, 13000,13500,15000, 13000,15000,16000}; 
+std::array<double, N_ENERGIES*3> X_MIN = {500,500,1500, 1000,1500,3500, 500,1000,3000, 500,1000,4000, 1000,1500,5000};
+*/
+/*
+std::array<double, N_ENERGIES*3> X_MAX = {4000,5000,6000, 6000,7500,9000, 9000,9500,11000, 10000,11000,13000, 11000,13000,14000}; 
+std::array<double, N_ENERGIES*3> X_MIN = {1000,1500,3000, 2000,3000,5000, 1500,3500,6000, 1500,4000,7000, 3000,3000,9000};  
+
+std::array<double, N_ENERGIES*3> X_MAX = {5000,6000,7000, 8000,8000,9000, 10000,11000,12000, 12000,12000,14000, 13500,15000,15000}; 
+std::array<double, N_ENERGIES*3> X_MIN = {500,1000,2500, 1000,1000,3000, 1000,1000,4000, 1000,1000,4000, 1500,3000,6000};
+*/
+std::array<double, N_ENERGIES*3> A_MAX = {27,25,22, 21,21,20, 21,21,20, 21,21,25, 21,21,25};
+std::array<double, N_ENERGIES*3> A_MIN = {3,3,5, 3,3,10, 3,3,10, 3,3,12, 3,3,15};
+std::array<EColor, N_ENERGIES> COLORS = {kRed, kBlue, kGreen, kCyan, kYellow};
+
+void styleGraph(TGraphErrors* &graph, const char* title, EColor color) {
+  graph->SetTitle(title);
+  graph->SetMarkerColor(color);
+  graph->SetMarkerStyle(21);
+}
+
+void styleMultigraph(TMultiGraph* &multigraph, const char* xlabel, const char* ylabel, double xmin, double xmax, double ymin, double ymax) {
+  multigraph->GetXaxis()->SetTitle(xlabel);
+  multigraph->GetYaxis()->SetTitle(ylabel);
+  multigraph->GetXaxis()->SetLimits(xmin,xmax);
+  multigraph->SetMinimum(ymin);
+  multigraph->SetMaximum(ymax);
+}
+
+void openFiles(std::map<std::string, TFile*> &inFiles) {
+  for (int i{0}; i<N_ENERGIES; ++i) {
+    inFiles[Form("Calib_%i_GeV", ENERGIES[i])] = new TFile(Form("calib_alex/TB_outputRun_%i_ClusterSize_3.root",RUNS_CALIB[i]),"read");
+    inFiles[Form("Test_%i_GeV", ENERGIES[i])] = new TFile(Form("calib_alex/TB_outputRun_%i_ClusterSize_3.root",RUNS_TEST[i]),"read");
   }
-  TGraphErrors* graph2[NENERGIES];
-  TGraphErrors* gRatio[NENERGIES];
-  for (int k{0}; k<NENERGIES; ++k) {
-    graph2[k] = new TGraphErrors();
-    graph2[k]->SetTitle(Form("%i GeV",energies[k]));
-    gRatio[k] = new TGraphErrors();
-    gRatio[k]->SetTitle(Form("%i GeV",energies[k]));
-  }
-  double en[NENERGIES*3];
-  double SciFIQDC[NENERGIES*3];
-  double err[NENERGIES*3];
-  EColor colors[5] = {kRed, kBlue, kGreen, kCyan, kYellow};
-  TCanvas* c[NENERGIES];
-  TCanvas* cAlpha[NENERGIES];
-  TCanvas* cEn[NENERGIES];
-  TCanvas* cMarco = new TCanvas("c","c", 1920,1080);
-  TCanvas* cRatioWall[NENERGIES];
-  TCanvas* cRatioEn = new TCanvas("cRatioEn","cRatioEn", 1920,1080);
-  TH2D* hRatioWall[NENERGIES];
-  TH2D* hRatioEn = new TH2D("Scifi/E_reco vs E_reco","Scifi/US vs E_reco; E_reco (GeV); SciFi/E_reco (a.u.)", 350, 0, 350, 200, -1, 1);
+}
+
+void definePlots(std::map<std::string, TH1*> &histos, std::map<std::string, TF1*> &functions, std::map<std::string, TGraphErrors*> &graphs, std::map<std::string, TMultiGraph*> &multigraphs) {
+
+  // vs E
+  multigraphs["SciFiQDC_vs_E"] = new TMultiGraph();
+  styleMultigraph(multigraphs["SciFiQDC_vs_E"], "pion energy (GeV)", "mean SciFi QDC (a.u.)", 50, 350, 0, 5000);
+  multigraphs["USQDC_vs_E"] = new TMultiGraph();
+  styleMultigraph(multigraphs["USQDC_vs_E"], "pion energy (GeV)", "mean US QDC (a.u.)", 50, 350, 0, 14000);
+  multigraphs["K_vs_E"] = new TMultiGraph();
+  styleMultigraph(multigraphs["K_vs_E"], "pion energy (GeV)", "K (GeV/QDC)", 50, 350, 0.03, 0.15);
+  multigraphs["Alpha_vs_E"] = new TMultiGraph();
+  styleMultigraph(multigraphs["Alpha_vs_E"], "pion energy (GeV)", "Alpha (GeV/QDC)", 50, 350, -0.002, 0.025);
+  multigraphs["OffsetE_vs_E"] = new TMultiGraph();
+  styleMultigraph(multigraphs["OffsetE_vs_E"], "pion energy (GeV)", "E_reco - E (GeV)", 50, 350, -100, 100);
+  multigraphs["OffsetErel_vs_E"] = new TMultiGraph();
+  styleMultigraph(multigraphs["OffsetErel_vs_E"], "pion energy (GeV)", "(E_reco - E)/E %", 50, 350, -100, 100);
+  multigraphs["Eres_vs_E"] = new TMultiGraph();
+  styleMultigraph(multigraphs["Eres_vs_E"], "pion energy (GeV)", "Resolution %", 50, 350, 0, 50);
   
+  // vs shStart
+  multigraphs["SciFiQDC_vs_shStart"] = new TMultiGraph();
+  styleMultigraph(multigraphs["SciFiQDC_vs_shStart"], "shower start", "mean SciFi QDC (a.u.)", 0.5, 4.5, 0, 5000);
+  multigraphs["USQDC_vs_shStart"] = new TMultiGraph();
+  styleMultigraph(multigraphs["USQDC_vs_shStart"], "shower start", "mean US QDC (a.u.)", 0.5, 4.5, 0, 14000);
+  multigraphs["K_vs_shStart"] = new TMultiGraph();
+  styleMultigraph(multigraphs["K_vs_shStart"], "shower start", "K (GeV/QDC)", 0.5, 4.5, 0.03, 0.15);
+  multigraphs["Alpha_vs_shStart"] = new TMultiGraph();
+  styleMultigraph(multigraphs["Alpha_vs_shStart"], "shower start", "Alpha (GeV/QDC)", 0.5, 4.5, -0.002, 0.025);
+  multigraphs["OffsetE_vs_shStart"] = new TMultiGraph();
+  styleMultigraph(multigraphs["OffsetE_vs_shStart"], "shower start", "E_reco - E (GeV)", 0.5, 4.5, -100, 100);
+  multigraphs["OffsetErel_vs_shStart"] = new TMultiGraph();
+  styleMultigraph(multigraphs["OffsetErel_vs_shStart"], "shower start", "(E_reco - E)/E %", 0.5, 4.5, -100, 100);
+  multigraphs["Eres_vs_shStart"] = new TMultiGraph();
+  styleMultigraph(multigraphs["Eres_vs_shStart"], "shower start", "Resolution %", 0.5, 4.5, 0, 50);
 
-  TF1 *fitFunc = new TF1("fitFunc", "[0]*x + [1]");
-  fitFunc->SetParameters(-1/4, 4000);
-  TF1 *gaus = new TF1("gaus", "gaus");
-  gaus->SetParameters(1800, 12*0.001, 4*0.001);
-  TF1 *line = new TF1("line", "[0]*x + [1]", 50, 350);
-  line->SetParameters(0, 0);
+  for (int k{0}; k<N_SH_STARTS; ++k) {
+    auto label_shStart = Form("start_in_SciFi%i",k+2);
 
-  TF1 *gausM = new TF1("gaus", "gaus");
-  gausM->SetParameters(12000, 180, 30);
+    graphs[Form("SciFiQDC_vs_E_shStart%i",k+2)] = new TGraphErrors();
+    styleGraph(graphs[Form("SciFiQDC_vs_E_shStart%i",k+2)], label_shStart, COLORS[k]);
+    multigraphs["SciFiQDC_vs_E"]->Add(graphs[Form("SciFiQDC_vs_E_shStart%i",k+2)]);
 
+    graphs[Form("USQDC_vs_E_shStart%i",k+2)] = new TGraphErrors();
+    styleGraph(graphs[Form("USQDC_vs_E_shStart%i",k+2)], label_shStart, COLORS[k]);
+    multigraphs["USQDC_vs_E"]->Add(graphs[Form("USQDC_vs_E_shStart%i",k+2)]);
 
-  TFile* outf = new TFile("calibrations.root","recreate");
-  for (int i{0}; i<NENERGIES; ++i) {
-    std::cout<<i<<"\n";
-    indata[i] = new TFile(Form("calib_collab/TB_outputRun_%i.root",runs[i]),"read");
-    c[i] = new TCanvas(Form("US QDC vs SciFi QDC %i GeV",energies[i]),Form("US QDC vs SciFi QDC %i GeV",energies[i]), 1920,1080);
-    c[i]->Divide(2,2);
-    cAlpha[i] = new TCanvas(Form("Alpha %i GeV",energies[i]),Form("Alpha %i GeV",energies[i]), 1920,1080);
-    cAlpha[i]->Divide(3,1);
-    cEn[i] = new TCanvas(Form("Reconstructed Energy %i GeV",energies[i]),Form("Reconstructed Energy %i GeV",energies[i]), 1920,1080);
-    cEn[i]->Divide(3,1);
-    cRatioWall[i] = new TCanvas(Form("cRatioWall %i GeV",energies[i]),Form("cRatioWall %i GeV",energies[i]), 1920,1080);
-    hRatioWall[i] = new TH2D(Form("Scifi/E_reco vs starting wall %i GeV",energies[i]),Form("Scifi/E_reco vs starting wall %i GeV; starting wall; SciFi/E_reco (a.u.)", energies[i]), 3, 0.5, 3.5, 200, -1, 1);
-    TH1D* hAlpha[3];
-    TH1D* hEn[3];
-    TH1D* hMarco = new TH1D(Form("Reco_En_%iGeV", energies[i]),Form("Reco_En_%iGeV; Reconstructed energy (GeV); entries", energies[i]), 100, 50, 300);
-    c[i]->cd(1);
-    ((TH2D*)indata[i]->Get("GuilCut_QDCUS_vs_QDCScifi"))->DrawClone("colz");
-    gPad->Modified();
-    gPad->Update();
-    for (int j{0}; j<3; ++j) {
-      SciFIQDC[3*i+j] = ((TH1F*)indata[i]->Get(Form("GuilCut_Shower_SciFi_QDC_shStart%i",j+2)))->GetMean();
-      err[3*i+j] = ((TH1F*)indata[i]->Get(Form("GuilCut_Shower_SciFi_QDC_shStart%i",j+2)))->GetStdDev();
-      en[3*i+j] = energies[i] + 5*j;
-      graph[j]->SetPoint(i,en[3*i+j],SciFIQDC[3*i+j]);
-      graph[j]->SetPointError(i,0,err[3*i+j]);
-      graph2[i]->SetPoint(j,j+2+0.1*i,SciFIQDC[3*i+j]);
-      graph2[i]->SetPointError(j,0,err[3*i+j]);
+    graphs[Form("K_vs_E_shStart%i",k+2)] = new TGraphErrors();
+    styleGraph(graphs[Form("K_vs_E_shStart%i",k+2)], label_shStart, COLORS[k]);
+    multigraphs["K_vs_E"]->Add(graphs[Form("K_vs_E_shStart%i",k+2)]);
 
-      cAlpha[i]->cd(j+1);
-      TH2D* h = (TH2D*)indata[i]->Get(Form("GuilCut_QDCUS_vs_QDCScifi_ShStart_st%i",j+2));
-      int nx = h->GetXaxis()->FindBin(xmax[3*i+j]);
+    graphs[Form("Alpha_vs_E_shStart%i",k+2)] = new TGraphErrors();
+    styleGraph(graphs[Form("Alpha_vs_E_shStart%i",k+2)], label_shStart, COLORS[k]);
+    multigraphs["Alpha_vs_E"]->Add(graphs[Form("Alpha_vs_E_shStart%i",k+2)]);
+
+    graphs[Form("OffsetE_vs_E_shStart%i",k+2)] = new TGraphErrors();
+    styleGraph(graphs[Form("OffsetE_vs_E_shStart%i",k+2)], label_shStart, COLORS[k]);
+    multigraphs["OffsetE_vs_E"]->Add(graphs[Form("OffsetE_vs_E_shStart%i",k+2)]);
+
+    graphs[Form("OffsetErel_vs_E_shStart%i",k+2)] = new TGraphErrors();
+    styleGraph(graphs[Form("OffsetErel_vs_E_shStart%i",k+2)], label_shStart, COLORS[k]);
+    multigraphs["OffsetErel_vs_E"]->Add(graphs[Form("OffsetErel_vs_E_shStart%i",k+2)]);
+
+    graphs[Form("Eres_vs_E_shStart%i",k+2)] = new TGraphErrors();
+    styleGraph(graphs[Form("Eres_vs_E_shStart%i",k+2)], label_shStart, COLORS[k]);
+    multigraphs["Eres_vs_E"]->Add(graphs[Form("Eres_vs_E_shStart%i",k+2)]);
+  }
+
+  for (int k{0}; k<N_ENERGIES; ++k) {
+    auto label_En = Form("%i GeV",ENERGIES[k]);
+    graphs[Form("SciFiQDC_vs_shStart_%i_GeV",ENERGIES[k])] = new TGraphErrors();
+    styleGraph(graphs[Form("SciFiQDC_vs_shStart_%i_GeV",ENERGIES[k])], label_En, COLORS[k]);
+    multigraphs["SciFiQDC_vs_shStart"]->Add(graphs[Form("SciFiQDC_vs_shStart_%i_GeV",ENERGIES[k])]);
+
+    graphs[Form("USQDC_vs_shStart_%i_GeV",ENERGIES[k])] = new TGraphErrors();
+    styleGraph(graphs[Form("USQDC_vs_shStart_%i_GeV",ENERGIES[k])], label_En, COLORS[k]);
+    multigraphs["USQDC_vs_shStart"]->Add(graphs[Form("USQDC_vs_shStart_%i_GeV",ENERGIES[k])]);
+
+    graphs[Form("K_vs_shStart_%i_GeV",ENERGIES[k])] = new TGraphErrors();
+    styleGraph(graphs[Form("K_vs_shStart_%i_GeV",ENERGIES[k])], label_En, COLORS[k]);
+    multigraphs["K_vs_shStart"]->Add(graphs[Form("K_vs_shStart_%i_GeV",ENERGIES[k])]);
+
+    graphs[Form("Alpha_vs_shStart_%i_GeV",ENERGIES[k])] = new TGraphErrors();
+    styleGraph(graphs[Form("Alpha_vs_shStart_%i_GeV",ENERGIES[k])], label_En, COLORS[k]);
+    multigraphs["Alpha_vs_shStart"]->Add(graphs[Form("Alpha_vs_shStart_%i_GeV",ENERGIES[k])]);
+
+    graphs[Form("OffsetE_vs_shStart_%i_GeV",ENERGIES[k])] = new TGraphErrors();
+    styleGraph(graphs[Form("OffsetE_vs_shStart_%i_GeV",ENERGIES[k])], label_En, COLORS[k]);
+    multigraphs["OffsetE_vs_shStart"]->Add(graphs[Form("OffsetE_vs_shStart_%i_GeV",ENERGIES[k])]);
+
+    graphs[Form("OffsetErel_vs_shStart_%i_GeV",ENERGIES[k])] = new TGraphErrors();
+    styleGraph(graphs[Form("OffsetErel_vs_shStart_%i_GeV",ENERGIES[k])], label_En, COLORS[k]);
+    multigraphs["OffsetErel_vs_shStart"]->Add(graphs[Form("OffsetErel_vs_shStart_%i_GeV",ENERGIES[k])]);
+
+    graphs[Form("Eres_vs_shStart_%i_GeV",ENERGIES[k])] = new TGraphErrors();
+    styleGraph(graphs[Form("Eres_vs_shStart_%i_GeV",ENERGIES[k])], label_En, COLORS[k]);
+    multigraphs["Eres_vs_shStart"]->Add(graphs[Form("Eres_vs_shStart_%i_GeV",ENERGIES[k])]);
+
+    histos[Form("Scifi/E_reco vs starting wall %i GeV",ENERGIES[k])] = new TH2D(Form("Scifi/E_reco vs starting wall %i GeV",ENERGIES[k]),Form("Scifi/E_reco vs starting wall %i GeV; starting wall; SciFi/E_reco (a.u.)", ENERGIES[k]), 3, 0.5, 3.5, 200, -1, 1);
+  }
+    
+  for (int m{0}; m<N_ENERGIES; ++m) {
+    for (int l{0}; l<N_SH_STARTS; ++l) {
+      histos[Form("Alpha_%i_GeV_shStart%i",ENERGIES[m],l+2)] = new TH1D(Form("Alpha_%i_GeV_shStart%i",ENERGIES[m],l+2),Form("Alpha_%i_GeV_shStart%i; Alpha (GeV/QDC); entries",ENERGIES[m],l+2), 70, -0.02, 0.04);
+      histos[Form("Ereco_%i_GeV_shStart%i",ENERGIES[m],l+2)] = new TH1D(Form("Ereco_%i_GeV_shStart%i",ENERGIES[m],l+2),Form("Ereco_%i_GeV_shStart%i; Reconstructed energy (GeV); entries",ENERGIES[m],l+2), 100, 0, 500);
+      histos[Form("Ereco_%i_GeV_shStart%i_low",ENERGIES[m],l+2)] = new TH1D(Form("Ereco_%i_GeV_shStart%i_low",ENERGIES[m],l+2),Form("Ereco_%i_GeV_shStart%i_low; Reconstructed energy (GeV); entries",ENERGIES[m],l+2), 100, 0, 500);
+      histos[Form("Ereco_%i_GeV_shStart%i_high",ENERGIES[m],l+2)] = new TH1D(Form("Ereco_%i_GeV_shStart%i_high",ENERGIES[m],l+2),Form("Ereco_%i_GeV_shStart%i_high; Reconstructed energy (GeV); entries",ENERGIES[m],l+2), 100, 0, 500);
+      histos[Form("high-low_%i_GeV_shStart%i",ENERGIES[m],l+2)] = new TH1D(Form("high-low_%i_GeV_shStart%i",ENERGIES[m],l+2),Form("high-low_%i_GeV_shStart%i; Energy gap (GeV); entries",ENERGIES[m],l+2), 1000, -100, 100);
+      functions[Form("fitLine_USQDC_vs_SciFiQDC_%i_GeV_shStart%i",ENERGIES[m],l+2)] = new TF1(Form("f_%i_GeV_shStart%i", ENERGIES[m], l+2), "[0]*x + [1]");
+      functions[Form("fitLine_USQDC_vs_SciFiQDC_%i_GeV_shStart%i",ENERGIES[m],l+2)]->SetParameters(-1/4, 4000);
+      //functions[Form("fitLine_USQDC_vs_SciFiQDC_%i_GeV_shStart%i",ENERGIES[m],l+2)]->SetRange(X_MIN[3*m+l], X_MAX[3*m+l]);
+      functions[Form("fitGaus_Alpha_%i_GeV_shStart%i",ENERGIES[m],l+2)] = new TF1("gaus", "gaus");
+      functions[Form("fitGaus_Alpha_%i_GeV_shStart%i",ENERGIES[m],l+2)]->SetParameters(1800, 12*0.001, 4*0.001);
+      functions[Form("fitGaus_Alpha_%i_GeV_shStart%i",ENERGIES[m],l+2)]->SetRange(A_MIN[3*m+l]*0.001, A_MAX[3*m+l]*0.001);
+    }
+  }
+
+}
+
+void fillQDCPLots(std::map<std::string, TFile*> &inFiles, std::map<std::string, TH1*> &histos, std::map<std::string, TGraphErrors*> &graphs, std::map<std::string, TProfile*> &profiles) {
+  for (int i{0}; i<N_ENERGIES; ++i) {
+    histos[Form("Calib_USQDC_vs_SciFiQDC_%i_GeV",ENERGIES[i])] = (TH2D*)((TH2D*)inFiles[Form("Calib_%i_GeV", ENERGIES[i])]->Get("Cut_QDCUS_vs_QDCScifi"))->Clone(Form("QDCUS_vs_QDCScifi_Calib_%i_GeV", ENERGIES[i]));
+    histos[Form("Test_USQDC_vs_SciFiQDC_%i_GeV",ENERGIES[i])] = (TH2D*)((TH2D*)inFiles[Form("Test_%i_GeV", ENERGIES[i])]->Get("Cut_QDCUS_vs_QDCScifi"))->Clone(Form("QDCUS_vs_QDCScifi_Test_%i_GeV", ENERGIES[i]));
+    for (int j{0}; j<N_SH_STARTS; ++j) {
+      histos[Form("Calib_USQDC_vs_SciFiQDC_%i_GeV_shStart%i",ENERGIES[i],j+2)] = (TH2D*)((TH2D*)inFiles[Form("Calib_%i_GeV", ENERGIES[i])]->Get(Form("Cut_QDCUS_vs_QDCScifi_ShStart_st%i",j+2)))->Clone(Form("QDCUS_vs_QDCScifi_Calib_%i_GeV_st%i", ENERGIES[i], j+2));
+      histos[Form("Test_USQDC_vs_SciFiQDC_%i_GeV_shStart%i",ENERGIES[i],j+2)] = (TH2D*)((TH2D*)inFiles[Form("Test_%i_GeV", ENERGIES[i])]->Get(Form("Cut_QDCUS_vs_QDCScifi_ShStart_st%i",j+2)))->Clone(Form("QDCUS_vs_QDCScifi_Test_%i_GeV_st%i", ENERGIES[i], j+2));
+
+      profiles[Form("Calib_profile_%i_GeV_shStart%i",ENERGIES[i],j+2)] =  ((TH2D*)histos[Form("Calib_USQDC_vs_SciFiQDC_%i_GeV_shStart%i",ENERGIES[i],j+2)])->ProfileX(Form("Calib_profile_%i_GeV_shStart%i",ENERGIES[i],j+2));
+
+      double scifiQDC = ((TH1F*)inFiles[Form("Calib_%i_GeV", ENERGIES[i])]->Get(Form("Cut_Shower_SciFi_QDC_shStart%i",j+2)))->GetMean();
+      double scifiQDCerr = ((TH1F*)inFiles[Form("Calib_%i_GeV", ENERGIES[i])]->Get(Form("Cut_Shower_SciFi_QDC_shStart%i",j+2)))->GetStdDev();
+
+      TH2D* h = (TH2D*)inFiles[Form("Calib_%i_GeV", ENERGIES[i])]->Get(Form("Cut_QDCUS_vs_QDCScifi_ShStart_st%i",j+2));
       int ny = h->GetYaxis()->GetNbins();
-      int nxmax = h->GetXaxis()->GetNbins();
 
-      TH1D* h1D = h->ProjectionX("h1D", 0, ny);
-      gUS[j]->SetPoint(i,en[3*i+j],h1D->GetMean());
-      gUS[j]->SetPointError(i,0,h1D->GetStdDev());
+      double usQDC = ((TH1D*)h->ProjectionX("h1D", 0, ny))->GetMean();
+      double usQDCerr = ((TH1D*)h->ProjectionX("h1D", 0, ny))->GetStdDev();
+
+      graphs[Form("SciFiQDC_vs_E_shStart%i",j+2)]->SetPoint(i, ENERGIES[i] + 5*j, scifiQDC);
+      graphs[Form("SciFiQDC_vs_E_shStart%i",j+2)]->SetPointError(i, 0, scifiQDCerr);
+      graphs[Form("SciFiQDC_vs_shStart_%i_GeV",ENERGIES[i])]->SetPoint(j, j+2+0.1*i, scifiQDC);
+      graphs[Form("SciFiQDC_vs_shStart_%i_GeV",ENERGIES[i])]->SetPointError(j, 0, scifiQDCerr);
+
+      graphs[Form("USQDC_vs_E_shStart%i",j+2)]->SetPoint(i, ENERGIES[i] + 5*j, usQDC);
+      graphs[Form("USQDC_vs_E_shStart%i",j+2)]->SetPointError(i, 0, usQDCerr);
+      graphs[Form("USQDC_vs_shStart_%i_GeV",ENERGIES[i])]->SetPoint(j, j+2+0.1*i, usQDC);
+      graphs[Form("USQDC_vs_shStart_%i_GeV",ENERGIES[i])]->SetPointError(j, 0, usQDCerr);
+    }
+  }
+}
+
+double computeKfromFit(std::map<std::string, TFile*> &inFiles, std::map<std::string, TH1*> &histos, std::map<std::string, TF1*> &functions, std::map<std::string, TGraphErrors*> &graphs) {
+  double sum_k{0};
+  for (int i{0}; i<N_ENERGIES; ++i) {
+    for (int j{0}; j<N_SH_STARTS; ++j) {     
+      // fit previously filled scatter plots
+
+      functions[Form("fitLine_USQDC_vs_SciFiQDC_%i_GeV_shStart%i",ENERGIES[i],j+2)]->SetRange(X_MIN[3*i+j], X_MAX[3*i+j]);
+      histos[Form("Calib_USQDC_vs_SciFiQDC_%i_GeV_shStart%i",ENERGIES[i],j+2)]->Fit(functions[Form("fitLine_USQDC_vs_SciFiQDC_%i_GeV_shStart%i",ENERGIES[i],j+2)],"RQ");
+      double k = ENERGIES[i]/functions[Form("fitLine_USQDC_vs_SciFiQDC_%i_GeV_shStart%i",ENERGIES[i],j+2)]->GetParameter(1);
+      double kErr = k*functions[Form("fitLine_USQDC_vs_SciFiQDC_%i_GeV_shStart%i",ENERGIES[i],j+2)]->GetParError(1)/functions[Form("fitLine_USQDC_vs_SciFiQDC_%i_GeV_shStart%i",ENERGIES[i],j+2)]->GetParameter(1);
+      std::cout<<"k:\t"<<k<<std::endl;
+      std::cout<<"errk:\t"<<kErr<<std::endl;
+      graphs[Form("K_vs_E_shStart%i",j+2)]->SetPoint(i,ENERGIES[i] + 5*j,k);
+      graphs[Form("K_vs_E_shStart%i",j+2)]->SetPointError(i,0,kErr);
+      graphs[Form("K_vs_shStart_%i_GeV",ENERGIES[i])]->SetPoint(j,j+2+0.1*i,k);
+      graphs[Form("K_vs_shStart_%i_GeV",ENERGIES[i])]->SetPointError(j,0,kErr);
+      if (j<N_SH_STARTS-1) {
+        sum_k += k;
+      }
+    }
+  }
+  return sum_k/((N_SH_STARTS-1)*N_ENERGIES);      
+}
+
+double computeAlphafromFit(std::map<std::string, TFile*> &inFiles, std::map<std::string, TH1*> &histos, std::map<std::string, TF1*> &functions, std::map<std::string, TGraphErrors*> &graphs) {
+  double sum_alpha{0};
+  for (int i{0}; i<N_ENERGIES; ++i) {
+    for (int j{0}; j<N_SH_STARTS; ++j) {    
+      // fit previously filled scatter plots
+      functions[Form("fitLine_USQDC_vs_SciFiQDC_%i_GeV_shStart%i",ENERGIES[i],j+2)]->SetRange(X_MIN[3*i+j], X_MAX[3*i+j]);
+      histos[Form("Calib_USQDC_vs_SciFiQDC_%i_GeV_shStart%i",ENERGIES[i],j+2)]->Fit(functions[Form("fitLine_USQDC_vs_SciFiQDC_%i_GeV_shStart%i",ENERGIES[i],j+2)],"RQ");
+      double alpha = -ENERGIES[i]*functions[Form("fitLine_USQDC_vs_SciFiQDC_%i_GeV_shStart%i",ENERGIES[i],j+2)]->GetParameter(0)/functions[Form("fitLine_USQDC_vs_SciFiQDC_%i_GeV_shStart%i",ENERGIES[i],j+2)]->GetParameter(1);
       
-      hAlpha[j] = new TH1D(Form("Alpha_%iGeV_st%i", energies[i], j+2),Form("Alpha_%iGeV_st%i; Alpha (GeV/QDC); entries", energies[i], j+2), 70, -0.02, 0.04);
-      hEn[j] = new TH1D(Form("Reco_En_%iGeV_st%i", energies[i], j+2),Form("Reco_En_%iGeV_st%i; Reconstructed energy (GeV); entries", energies[i], j+2), 100, 0, 500);
-      for (int binX = h->GetXaxis()->FindBin(xmin[3*i+j]); binX <= nx; ++binX) {
-        for (int binY = 1; binY <= ny; ++binY) {
-            // Access the bin content
-            double binContent = h->GetBinContent(binX, binY);
-            if (binContent>0) {
-              double scifiQ = h->GetYaxis()->GetBinCenter(binY);
-              double USQ = h->GetXaxis()->GetBinCenter(binX);
-              double a = (energies[i] - k_fix * scifiQ)/USQ;
-              hAlpha[j]->Fill(a,binContent);             
-            }
-        }
-      }
-      for (int binX = 1; binX <= nxmax; ++binX) {
-        for (int binY = 1; binY <= ny; ++binY) {
-            // Access the bin content
-            double binContent = h->GetBinContent(binX, binY);
-            if (binContent>0) {
-              double scifiQ = h->GetYaxis()->GetBinCenter(binY);
-              double USQ = h->GetXaxis()->GetBinCenter(binX);
-              double recEn = k_fix*(h->GetYaxis()->GetBinCenter(binY)) + alpha_fix*(h->GetXaxis()->GetBinCenter(binX));
-              hEn[j]->Fill(recEn,binContent);
-              if (recEn>0) {
-                hRatioWall[i]->Fill(j+1, scifiQ*k_fix/recEn);
-                hRatioEn->Fill(recEn, scifiQ*k_fix/recEn);
-              }
-              if (j<2) {hMarco->Fill(recEn,binContent);}             
-            }
-        }
-      }
-      gStyle->SetOptFit(1011);
-      gaus->SetRange(amin[3*i+j]*0.001, amax[3*i+j]*0.001);
-      //gaus->FixParameter(0,hAlpha[j]->GetMaximum());
-      hAlpha[j]->Fit(gaus,"RQ");
-      hAlpha[j]->Draw("hist colz");
-
-      gPad->Modified();
-      gPad->Update();
-
-      gAlpha[j]->SetPoint(i,en[3*i+j],gaus->GetParameter(1));
-      gAlpha[j]->SetPointError(i,0,gaus->GetParameter(2));
-
-      cEn[i]->cd(j+1);
-      hEn[j]->Draw("hist colz");
-      gEn[j]->SetPoint(i,en[3*i+j],hEn[j]->GetMean() - energies[i]);
-      gEn[j]->SetPointError(i,0,hEn[j]->GetStdDev());
-
-      gEnrel[j]->SetPoint(i,en[3*i+j],(hEn[j]->GetMean() - energies[i])/energies[i]*100);
-      gEnrel[j]->SetPointError(i,0,hEn[j]->GetStdDev()/energies[i]*100);
-
-      gErr[j]->SetPoint(i,en[3*i+j],hEn[j]->GetStdDev()/energies[i]*100);
-
-      if (i==2) {
-        cMarco->cd();
-        gStyle->SetOptFit(1011);
-        gStyle->SetOptStat(0);
-        gausM->SetRange(110, 250);
-        //gaus->FixParameter(0,hAlpha[j]->GetMaximum());
-        hMarco->Fit(gausM,"RQ");
-        hMarco->Draw("hist colz");
-
-        gPad->Modified();
-        gPad->Update();
-      }
-
-      c[i]->cd(j+2);
-      h->SetStats(0);
-      gStyle->SetOptFit(1011);
-      fitFunc->SetRange(xmin[3*i+j], xmax[3*i+j]);
-      h->Fit(fitFunc,"RQ"); 
-      h->DrawClone("colz");
-      //fitFunc->Draw("same");
-      gPad->Modified();
-      gPad->Update();
-      double alpha = -energies[i]*fitFunc->GetParameter(0)/fitFunc->GetParameter(1);
-      double erralpha = alpha*(std::abs(fitFunc->GetParError(0)/fitFunc->GetParameter(0))+std::abs(fitFunc->GetParError(1)/fitFunc->GetParameter(1)));
-      double k = energies[i]/fitFunc->GetParameter(1);
-      double errk = k*fitFunc->GetParError(1)/fitFunc->GetParameter(1);
-      // gAlpha[j]->SetPoint(i,en[3*i+j],alpha);
-      // gAlpha[j]->SetPointError(i,0,erralpha);
-      gK[j]->SetPoint(i,en[3*i+j],k);
-      gK[j]->SetPointError(i,0,errk);
-      if (j!=2) {
-        mean_k += k/(NENERGIES*2);
-        mean_a += gaus->GetParameter(1)/(NENERGIES*2);
+      double alphaErr = alpha*(functions[Form("fitLine_USQDC_vs_SciFiQDC_%i_GeV_shStart%i",ENERGIES[i],j+2)]->GetParError(0)/functions[Form("fitLine_USQDC_vs_SciFiQDC_%i_GeV_shStart%i",ENERGIES[i],j+2)]->GetParameter(0) + functions[Form("fitLine_USQDC_vs_SciFiQDC_%i_GeV_shStart%i",ENERGIES[i],j+2)]->GetParError(1)/functions[Form("fitLine_USQDC_vs_SciFiQDC_%i_GeV_shStart%i",ENERGIES[i],j+2)]->GetParameter(1));
+      std::cout<<"alpha:\t"<<alpha<<std::endl;
+      std::cout<<"erralpha:\t"<<alphaErr<<std::endl;
+      graphs[Form("Alpha_vs_E_shStart%i",j+2)]->SetPoint(i,ENERGIES[i] + 5*j,alpha);
+      graphs[Form("Alpha_vs_E_shStart%i",j+2)]->SetPointError(i,0,alphaErr);
+      graphs[Form("Alpha_vs_shStart_%i_GeV",ENERGIES[i])]->SetPoint(j,j+2+0.1*i,alpha);
+      graphs[Form("Alpha_vs_shStart_%i_GeV",ENERGIES[i])]->SetPointError(j,0,alphaErr);
+      if (j<N_SH_STARTS-1) {
+        sum_alpha += alpha;
       }
     }
+  }
+  return sum_alpha/((N_SH_STARTS-1)*N_ENERGIES);      
+}
 
-    outf->cd();
-    c[i]->Write();
-    cAlpha[i]->Write();
-    cEn[i]->Write();
-    cMarco->Write();
-    cRatioWall[i]->cd();
-    hRatioWall[i]->Draw("colz");
-    gStyle->SetOptStat("ne");
-    TPaveStats* stats = (TPaveStats*)hRatioWall[i]->FindObject("stats");
-    stats->SetX1NDC(0.1);
-    stats->SetX2NDC(0.3);
-    stats->SetY1NDC(0.0);
-    stats->SetY2NDC(0.2);
-    hRatioWall[i]->SetStats(1);
-    hRatioWall[i]->Draw("colz");
-    cRatioWall[i]->Write();
-    for (int x{0}; x<3; ++x) {
-      TH1D* hist1D = hRatioWall[i]->ProjectionY("hist1D", x+1, x+1);
-      gRatio[i]->SetPoint(x,x+0.8+0.1*i,hist1D->GetMean());
-      gRatio[i]->SetPointError(x,0,hist1D->GetStdDev());
+double computeAlpha(std::map<std::string, TFile*> &inFiles, std::map<std::string, TH1*> &histos, std::map<std::string, TF1*> &functions, std::map<std::string, TGraphErrors*> &graphs, const double k) {
+  double sum_alpha{0};
+  for (int i{0}; i<N_ENERGIES; ++i) {
+    for (int j{0}; j<N_SH_STARTS; ++j) {  
+      int upper_x_bin = histos[Form("Calib_USQDC_vs_SciFiQDC_%i_GeV_shStart%i",ENERGIES[i],j+2)]->GetXaxis()->FindBin(X_MAX[3*i+j]);
+      int lower_x_bin = histos[Form("Calib_USQDC_vs_SciFiQDC_%i_GeV_shStart%i",ENERGIES[i],j+2)]->GetXaxis()->FindBin(X_MIN[3*i+j]);
+      int upper_y_bin = histos[Form("Calib_USQDC_vs_SciFiQDC_%i_GeV_shStart%i",ENERGIES[i],j+2)]->GetYaxis()->GetNbins();
+      for (int binX = lower_x_bin; binX <= upper_x_bin; ++binX) {
+        for (int binY = 1; binY <= upper_y_bin; ++binY) {
+            // Access the bin content
+            double binContent = histos[Form("Calib_USQDC_vs_SciFiQDC_%i_GeV_shStart%i",ENERGIES[i],j+2)]->GetBinContent(binX, binY);
+            if (binContent>0) {
+              double scifiQDC = histos[Form("Calib_USQDC_vs_SciFiQDC_%i_GeV_shStart%i",ENERGIES[i],j+2)]->GetYaxis()->GetBinCenter(binY);
+              double usQDC = histos[Form("Calib_USQDC_vs_SciFiQDC_%i_GeV_shStart%i",ENERGIES[i],j+2)]->GetXaxis()->GetBinCenter(binX);
+              double a = (ENERGIES[i] - k * scifiQDC)/usQDC;
+              histos[Form("Alpha_%i_GeV_shStart%i",ENERGIES[i],j+2)]->Fill(a,binContent);             
+            }
+        }
+      }   
+      // fit obtained alpha distibution
+      histos[Form("Alpha_%i_GeV_shStart%i",ENERGIES[i],j+2)]->Fit(functions[Form("fitGaus_Alpha_%i_GeV_shStart%i",ENERGIES[i],j+2)],"RQ");
+      double alpha = functions[Form("fitGaus_Alpha_%i_GeV_shStart%i",ENERGIES[i],j+2)]->GetParameter(1);
+      double alphaErr = functions[Form("fitGaus_Alpha_%i_GeV_shStart%i",ENERGIES[i],j+2)]->GetParameter(2); // Suggestion: take the error on the mean (1st parameter) as the error instead
+      std::cout<<"alpha:\t"<<alpha<<std::endl;
+      std::cout<<"alphaErr:\t"<<alphaErr<<std::endl;
+      graphs[Form("Alpha_vs_E_shStart%i",j+2)]->SetPoint(i,ENERGIES[i] + 5*j,alpha);
+      graphs[Form("Alpha_vs_E_shStart%i",j+2)]->SetPointError(i,0,alphaErr);
+      graphs[Form("Alpha_vs_shStart_%i_GeV",ENERGIES[i])]->SetPoint(j,j+2+0.1*i,alpha);
+      graphs[Form("Alpha_vs_shStart_%i_GeV",ENERGIES[i])]->SetPointError(j,0,alphaErr);
+      if (j<N_SH_STARTS-1) {
+        sum_alpha += alpha;
+      }
     }
-    indata[i]->Close();
+  }
+  return sum_alpha/((N_SH_STARTS-1)*N_ENERGIES);      
+}
+
+void pca(std::map<std::string, TFile*> &inFiles, std::map<std::string, TH1*> &histos, std::map<std::string, TGraphErrors*> &graphs, double &k_mean, double &alpha_mean, std::map<std::string, TLine*> &pca_lines, std::vector<double> &ks, std::vector<double> &alphas){
+  double* data = new double[2];
+  double alpha_sum = 0;
+  double k_sum = 0;
+  for (int i{0}; i<N_ENERGIES; ++i) {
+    for (int j{0}; j<N_SH_STARTS; ++j) { 
+      TPrincipal* principal = new TPrincipal(2,"D"); 
+      int upper_x_bin = histos[Form("Calib_USQDC_vs_SciFiQDC_%i_GeV_shStart%i",ENERGIES[i],j+2)]->GetXaxis()->FindBin(X_MAX[3*i+j]);
+      int lower_x_bin = histos[Form("Calib_USQDC_vs_SciFiQDC_%i_GeV_shStart%i",ENERGIES[i],j+2)]->GetXaxis()->FindBin(X_MIN[3*i+j]);
+      int upper_y_bin = histos[Form("Calib_USQDC_vs_SciFiQDC_%i_GeV_shStart%i",ENERGIES[i],j+2)]->GetYaxis()->GetNbins();
+      for (int binX = lower_x_bin; binX <= upper_x_bin; ++binX) {
+        for (int binY = 1; binY <= upper_y_bin; ++binY) {
+          // Access the bin content
+          double binContent = histos[Form("Calib_USQDC_vs_SciFiQDC_%i_GeV_shStart%i",ENERGIES[i],j+2)]->GetBinContent(binX, binY);
+          if (binContent>0) {
+            double scifiQDC = histos[Form("Calib_USQDC_vs_SciFiQDC_%i_GeV_shStart%i",ENERGIES[i],j+2)]->GetYaxis()->GetBinCenter(binY);
+            double usQDC = histos[Form("Calib_USQDC_vs_SciFiQDC_%i_GeV_shStart%i",ENERGIES[i],j+2)]->GetXaxis()->GetBinCenter(binX);
+            data[0] = usQDC;
+            data[1] = scifiQDC;
+            //std::cout<<data[0]<<"\t"<<data[1]<<"\n";
+            for (int m{0}; m<binContent; ++m) {
+              principal->AddRow(data);
+            }            
+          }
+        }
+      }   
+      // make pca
+      //std::cout<<"\n\n\nEnergy:\t"<<ENERGIES[i]<<"\t station:\t"<< j+1 << "\n";
+      principal->MakePrincipals();
+      // principal->Print();
+      auto eigenV = principal->GetEigenVectors();
+      // eigenV->Print();
+      auto meanV = principal->GetMeanValues();
+      // meanV->Print();
+      auto sigmaV = principal->GetSigmas();
+      // principal->MakeHistograms();
+      // auto hist_list = principal->GetHistograms();
+      // histos[Form("pca_s_%i_GeV_shStart%i",ENERGIES[i],j+2)] = (TH1D*)((TH1D*)hist_list->FindObject("pca_s"))->Clone(Form("pca_s_%i_GeV_shStart%i",ENERGIES[i],j+2));
+      // histos[Form("pca_e_%i_GeV_shStart%i",ENERGIES[i],j+2)] = (TH1D*)((TH1D*)hist_list->FindObject("pca_e"))->Clone(Form("pca_e_%i_GeV_shStart%i",ENERGIES[i],j+2));
+      // histos[Form("pca_x000_%i_GeV_shStart%i",ENERGIES[i],j+2)] = (TH1D*)((TH1D*)hist_list->FindObject("pca_x000"))->Clone(Form("pca_x000_%i_GeV_shStart%i",ENERGIES[i],j+2));
+      // histos[Form("pca_d000_%i_GeV_shStart%i",ENERGIES[i],j+2)] = (TH1D*)((TH1D*)hist_list->FindObject("pca_d000"))->Clone(Form("pca_d000_%i_GeV_shStart%i",ENERGIES[i],j+2));
+      // histos[Form("pca_p000_%i_GeV_shStart%i",ENERGIES[i],j+2)] = (TH1D*)((TH1D*)hist_list->FindObject("pca_p000"))->Clone(Form("pca_p000_%i_GeV_shStart%i",ENERGIES[i],j+2));
+      // histos[Form("pca_x001_%i_GeV_shStart%i",ENERGIES[i],j+2)] = (TH1D*)((TH1D*)hist_list->FindObject("pca_x001"))->Clone(Form("pca_x001_%i_GeV_shStart%i",ENERGIES[i],j+2));
+      // histos[Form("pca_d001_%i_GeV_shStart%i",ENERGIES[i],j+2)] = (TH1D*)((TH1D*)hist_list->FindObject("pca_d001"))->Clone(Form("pca_d001_%i_GeV_shStart%i",ENERGIES[i],j+2));
+      // histos[Form("pca_p001_%i_GeV_shStart%i",ENERGIES[i],j+2)] = (TH1D*)((TH1D*)hist_list->FindObject("pca_p001"))->Clone(Form("pca_p001_%i_GeV_shStart%i",ENERGIES[i],j+2));
+      double m = (*eigenV)[0][1]/(*eigenV)[0][0];
+      double q = (*meanV)[1]-m*(*meanV)[0];
+      pca_lines[Form("Line_%i_GeV_shStart%i",ENERGIES[i],j+2)] = new TLine(X_MIN[3*i+j], m*X_MIN[3*i+j]+q, X_MAX[3*i+j], m*X_MAX[3*i+j]+q);
+      double k = ENERGIES[i]/q;
+      double alpha = -m*k;
+
+      double dk_dy = -ENERGIES[i] / pow(((*meanV)[0] - m * (*meanV)[1]), 2);
+      double dk_dx = (-ENERGIES[i] * m) / pow(((*meanV)[0] - m * (*meanV)[1]), 2);
+
+      double kErr = std::sqrt(std::pow(dk_dy * (*sigmaV)[1], 2)+ std::pow(dk_dx * (*sigmaV)[0], 2));
+      double alphaErr = std::abs(m*kErr);
+      //principal->GetSigmas()->Print();
+      //principal->MakeHistograms();
+      delete principal;
+      
+      // double alphaErr = (*std::max_element(alpha_temp.begin(),alpha_temp.end()) - *std::min_element(alpha_temp.begin(),alpha_temp.end()))/2;
+      // double kErr = (*std::max_element(k_temp.begin(),k_temp.end()) - *std::min_element(k_temp.begin(),k_temp.end()))/2;
+      graphs[Form("Alpha_vs_E_shStart%i",j+2)]->SetPoint(i,ENERGIES[i] + 5*j,alpha);
+      graphs[Form("Alpha_vs_E_shStart%i",j+2)]->SetPointError(i,0,alphaErr);
+      graphs[Form("Alpha_vs_shStart_%i_GeV",ENERGIES[i])]->SetPoint(j,j+2+0.1*i,alpha);
+      graphs[Form("Alpha_vs_shStart_%i_GeV",ENERGIES[i])]->SetPointError(j,0,alphaErr);
+
+      graphs[Form("K_vs_E_shStart%i",j+2)]->SetPoint(i,ENERGIES[i] + 5*j,k);
+      graphs[Form("K_vs_E_shStart%i",j+2)]->SetPointError(i,0,kErr);
+      graphs[Form("K_vs_shStart_%i_GeV",ENERGIES[i])]->SetPoint(j,j+2+0.1*i,k);
+      graphs[Form("K_vs_shStart_%i_GeV",ENERGIES[i])]->SetPointError(j,0,kErr);
+      if (j<N_SH_STARTS-1) {
+        ks.push_back(k);
+        alphas.push_back(alpha);
+        alpha_sum += alpha;
+        k_sum += k;
+      } 
+    }
+  }
+  delete [] data;
+  alpha_mean = alpha_sum/((N_SH_STARTS-1)*N_ENERGIES);
+  k_mean = k_sum/((N_SH_STARTS-1)*N_ENERGIES);
+}
+
+void testEnergyResolution(std::map<std::string, TFile*> &inFiles, std::map<std::string, TH1*> &histos, std::map<std::string, TGraphErrors*> &graphs, const double k, const double alpha, const std::vector<double> ks, const std::vector<double> alphas, std::map<std::string, TF1*> &functions) {
+  // const double k_min = *std::min_element(ks.begin(), ks.end());
+  // const double k_max = *std::max_element(ks.begin(), ks.end());
+  // const double alpha_min = *std::min_element(alphas.begin(), alphas.end());
+  // const double alpha_max = *std::max_element(alphas.begin(), alphas.end());
+
+  const double k_min = ks[0];
+  const double k_max = ks[8];
+  const double alpha_min = alphas[0];
+  const double alpha_max = alphas[8];
+
+  for (int i{0}; i<N_ENERGIES; ++i) {
+    for (int j{0}; j<N_SH_STARTS; ++j) { 
+      // int upper_x_bin = histos[Form("Test_USQDC_vs_SciFiQDC_%i_GeV_shStart%i",ENERGIES[i],j+2)]->GetXaxis()->GetNbins();
+      // int upper_y_bin = histos[Form("Test_USQDC_vs_SciFiQDC_%i_GeV_shStart%i",ENERGIES[i],j+2)]->GetYaxis()->GetNbins();
+      int upper_x_bin = histos[Form("Calib_USQDC_vs_SciFiQDC_%i_GeV_shStart%i",ENERGIES[i],j+2)]->GetXaxis()->FindBin(X_MAX[3*i+j]);
+      int lower_x_bin = histos[Form("Calib_USQDC_vs_SciFiQDC_%i_GeV_shStart%i",ENERGIES[i],j+2)]->GetXaxis()->FindBin(X_MIN[3*i+j]);
+      int upper_y_bin = histos[Form("Calib_USQDC_vs_SciFiQDC_%i_GeV_shStart%i",ENERGIES[i],j+2)]->GetYaxis()->GetNbins();
+      for (int binX = lower_x_bin; binX <= upper_x_bin; ++binX) {
+        for (int binY = 1; binY <= upper_y_bin; ++binY) {
+          // Access the bin content
+          double binContent = histos[Form("Test_USQDC_vs_SciFiQDC_%i_GeV_shStart%i",ENERGIES[i],j+2)]->GetBinContent(binX, binY);
+          if (binContent>0) {
+            double scifiQDC = histos[Form("Test_USQDC_vs_SciFiQDC_%i_GeV_shStart%i",ENERGIES[i],j+2)]->GetYaxis()->GetBinCenter(binY);
+            double usQDC = histos[Form("Test_USQDC_vs_SciFiQDC_%i_GeV_shStart%i",ENERGIES[i],j+2)]->GetXaxis()->GetBinCenter(binX);
+            double recEn = k*scifiQDC + alpha*usQDC;
+            double recEn_min = k_min*scifiQDC + alpha_min*usQDC;
+            double recEn_max = k_max*scifiQDC + alpha_max*usQDC;
+            histos[Form("Ereco_%i_GeV_shStart%i",ENERGIES[i],j+2)]->Fill(recEn,binContent);
+            histos[Form("Ereco_%i_GeV_shStart%i_low",ENERGIES[i],j+2)]->Fill(recEn_min,binContent);
+            histos[Form("Ereco_%i_GeV_shStart%i_high",ENERGIES[i],j+2)]->Fill(recEn_max,binContent);
+            histos[Form("high-low_%i_GeV_shStart%i",ENERGIES[i],j+2)]->Fill(recEn_max - recEn_min,binContent);
+            if (recEn>0) {
+              histos[Form("Scifi/E_reco vs starting wall %i GeV",ENERGIES[i])]->Fill(j+1, scifiQDC*k/recEn);
+            }            
+          }
+        }
+      }
+      double h_max = histos[Form("Ereco_%i_GeV_shStart%i",ENERGIES[i],j+2)]->GetXaxis()->GetBinCenter(histos[Form("Ereco_%i_GeV_shStart%i",ENERGIES[i],j+2)]->GetMaximumBin());
+      double h_stddev = histos[Form("Ereco_%i_GeV_shStart%i",ENERGIES[i],j+2)]->GetStdDev();
+
+      functions[Form("Gaus_%i_GeV_shStart%i",ENERGIES[i],j+2)] = new TF1(Form("Gaus_%i_GeV_shStart%i",ENERGIES[i],j+2), "gaus", h_max-1.5*h_stddev, h_max+1.5*h_stddev);
+      histos[Form("Ereco_%i_GeV_shStart%i",ENERGIES[i],j+2)]->Fit(Form("Gaus_%i_GeV_shStart%i",ENERGIES[i],j+2), "RQ");
+      double Ereco = functions[Form("Gaus_%i_GeV_shStart%i",ENERGIES[i],j+2)]->GetParameter(1);
+      double ErecoErr = functions[Form("Gaus_%i_GeV_shStart%i",ENERGIES[i],j+2)]->GetParameter(2);
+
+      graphs[Form("OffsetE_vs_E_shStart%i",j+2)]->SetPoint(i,ENERGIES[i] + 5*j,Ereco - ENERGIES[i]);
+      graphs[Form("OffsetE_vs_E_shStart%i",j+2)]->SetPointError(i,0,ErecoErr);
+      graphs[Form("OffsetE_vs_shStart_%i_GeV",ENERGIES[i])]->SetPoint(j,j+2+0.1*i,Ereco - ENERGIES[i]);
+      graphs[Form("OffsetE_vs_shStart_%i_GeV",ENERGIES[i])]->SetPointError(j,0,ErecoErr);
+
+      graphs[Form("OffsetErel_vs_E_shStart%i",j+2)]->SetPoint(i,ENERGIES[i] + 5*j,(Ereco - ENERGIES[i])/ENERGIES[i]*100);
+      graphs[Form("OffsetErel_vs_E_shStart%i",j+2)]->SetPointError(i,0,ErecoErr/ENERGIES[i]*100);
+      graphs[Form("OffsetErel_vs_shStart_%i_GeV",ENERGIES[i])]->SetPoint(j,j+2+0.1*i,(Ereco - ENERGIES[i])/ENERGIES[i]*100);
+      graphs[Form("OffsetErel_vs_shStart_%i_GeV",ENERGIES[i])]->SetPointError(j,0,ErecoErr/ENERGIES[i]*100);
+
+      graphs[Form("Eres_vs_E_shStart%i",j+2)]->SetPoint(i,ENERGIES[i] + 5*j,ErecoErr/ENERGIES[i]*100);
+      graphs[Form("Eres_vs_shStart_%i_GeV",ENERGIES[i])]->SetPoint(j,j+2+0.1*i,ErecoErr/ENERGIES[i]*100);
+    }
+  }
+}
+
+void drawOnCanvases(std::map<std::string, TH1*> &histos, std::map<std::string, TF1*> &functions, std::map<std::string, TMultiGraph*> &multigraphs, std::map<std::string, TCanvas*> &canvases, std::map<std::string, TLine*> &pca_lines) {
+  for (auto const& mg : multigraphs) {
+    canvases[mg.first] = new TCanvas(mg.first.c_str(),mg.first.c_str(),1980,1020);
+    canvases[mg.first]->cd();
+    mg.second->Draw("ape");
+    canvases[mg.first]->BuildLegend();
+  }
+
+  for (int k{0}; k<N_SH_STARTS; ++k) {
+    for (int m{0}; m<N_ENERGIES; ++m) {
+      canvases[Form("GausFit_%i_GeV_shStart%i",ENERGIES[m],k+2)] = new TCanvas(Form("GausFit_%i_GeV_shStart%i",ENERGIES[m],k+2),Form("GausFit_%i_GeV_shStart%i",ENERGIES[m],k+2),1980,1020);
+      canvases[Form("GausFit_%i_GeV_shStart%i",ENERGIES[m],k+2)]->cd();
+      gStyle->SetOptFit(1);
+      histos[Form("Ereco_%i_GeV_shStart%i",ENERGIES[m],k+2)]->Draw("hist");
+      functions[Form("Gaus_%i_GeV_shStart%i",ENERGIES[m],k+2)]->Draw("same");
+      // TPaveStats *fitStats = (TPaveStats*)histos[Form("Ereco_%i_GeV_shStart%i",ENERGIES[m],k+2)]->FindObject("stats");
+      // fitStats->Draw("same");
+    }
+  }
+
+  for (int k{0}; k<N_SH_STARTS; ++k) {
+    canvases[Form("Ereco_shStart%i",k+2)] = new TCanvas(Form("Ereco_shStart%i",k+2),Form("Ereco_shStart%i",k+2),1980,1020);
+    canvases[Form("Ereco_shStart%i",k+2)]->cd();
+    for (int m{0}; m<N_ENERGIES; ++m) {
+      histos[Form("Clone_Ereco_%i_GeV_shStart%i",ENERGIES[m],k+2)] = (TH1D*)((TH1D*)histos[Form("Ereco_%i_GeV_shStart%i",ENERGIES[m],k+2)]->Clone(Form("Clone_Ereco_%i_GeV_shStart%i",ENERGIES[m],k+2)));
+      histos[Form("Clone_Ereco_%i_GeV_shStart%i",ENERGIES[m],k+2)]->SetLineColor(COLORS[m]);
+      histos[Form("Clone_Ereco_%i_GeV_shStart%i",ENERGIES[m],k+2)]->SetStats(0);
+      histos[Form("Clone_Ereco_%i_GeV_shStart%i",ENERGIES[m],k+2)]->Scale(1.0 / histos[Form("Clone_Ereco_%i_GeV_shStart%i",ENERGIES[m],k+2)]->Integral());
+      if (m==0) {
+        histos[Form("Clone_Ereco_%i_GeV_shStart%i",ENERGIES[m],k+2)]->Draw("hist");
+      }
+      else {
+        histos[Form("Clone_Ereco_%i_GeV_shStart%i",ENERGIES[m],k+2)]->Draw("hist same");
+      }
+    }
+    canvases[Form("Ereco_shStart%i",k+2)]->BuildLegend();
+  }
+
+  for (int k{0}; k<N_SH_STARTS; ++k) {
+    for (int m{0}; m<N_ENERGIES; ++m) {
+      canvases[Form("PCA_%i_GeV_shStart%i",ENERGIES[m],k+2)] = new TCanvas(Form("PCA_%i_GeV_shStart%i",ENERGIES[m],k+2),Form("PCA_%i_GeV_shStart%i",ENERGIES[m],k+2),1980,1020);
+      canvases[Form("PCA_%i_GeV_shStart%i",ENERGIES[m],k+2)]->cd();
+      histos[Form("Calib_USQDC_vs_SciFiQDC_%i_GeV_shStart%i",ENERGIES[m],k+2)]->Draw("COLZ");
+      pca_lines[Form("Line_%i_GeV_shStart%i",ENERGIES[m],k+2)]->Draw();
+    }
+  }
+}
+
+void calibration() {
+  std::map<std::string, TFile*> inFiles;
+  std::map<std::string, TH1*> histos;
+  std::map<std::string, TF1*> functions;
+  std::map<std::string, TGraphErrors*> graphs;
+  std::map<std::string, TMultiGraph*> multigraphs;
+  std::map<std::string, TProfile*> profiles;
+  std::map<std::string, TLine*> pca_lines;
+  std::map<std::string, TCanvas*> canvases;
+  double k{0};
+  double alpha{0};
+  std::vector<double> ks;
+  std::vector<double> alphas;
+
+
+  //TFile* outputFile = new TFile("calib_out_alex1/calibrations_pca.root","recreate");
+  TFile* outputFile = new TFile("calibrations_pca.root","recreate");
+  definePlots(histos, functions, graphs, multigraphs);
+  openFiles(inFiles);
+
+  fillQDCPLots(inFiles, histos, graphs, profiles);
+  pca(inFiles, histos, graphs, k, alpha, pca_lines, ks, alphas);
+  //k = computeKfromFit(inFiles, histos, functions, graphs);
+  //alpha = computeAlphafromFit(inFiles, histos, functions, graphs);
+  std::cout<<"mean K:\t"<<k<<std::endl;
+  std::cout<<"mean Alpha:\t"<<alpha<<std::endl;
+  std::cout<<"min K:\t"<<*std::min_element(ks.begin(), ks.end())<<std::endl;
+  std::cout<<"max K:\t"<<*std::max_element(ks.begin(), ks.end())<<std::endl;
+  std::cout<<"min Alpha:\t"<<*std::min_element(alphas.begin(), alphas.end())<<std::endl;
+  std::cout<<"max Alpha:\t"<<*std::max_element(alphas.begin(), alphas.end())<<std::endl;
+  testEnergyResolution(inFiles, histos, graphs, k, alpha, ks, alphas, functions);
+  drawOnCanvases(histos, functions, multigraphs, canvases, pca_lines);
+
+  outputFile->cd();
+
+  for (auto const& h : histos) {
+    h.second->Write();
+  }
+  for (auto const& c : canvases) {
+    c.second->Write();
+  }
+
+  for (auto const& p : profiles) {
+    p.second->Write();
   }
   
-  TCanvas* c1 = new TCanvas("SciFi QDC vs Energy","SciFi QDC vs Energy", 1920,1080);
-  TCanvas* c2 = new TCanvas("SciFi QDC vs start","SciFi QDC vs start", 1920,1080);
-  TCanvas* c3 = new TCanvas("Alpha vs Energy","Alpha vs Energy", 1920,1080);
-  TCanvas* c4 = new TCanvas("K vs Energy","K vs Energy", 1920,1080);
-  TCanvas* c5 = new TCanvas("E_reco - E","E_reco - E", 1920,1080);
-  TCanvas* c6 = new TCanvas("Relative energy resolution","Relative energy resolution", 1920,1080);
-  TCanvas* c7 = new TCanvas("(E_reco - E)/E","(E_reco - E)/E", 1920,1080);
-  TCanvas* c8 = new TCanvas("Scifi/E_reco vs starting wall","Scifi/E_reco vs starting wall", 1920,1080);
-  TCanvas* c9 = new TCanvas("US QDC vs Energy","US QDC vs Energy", 1920,1080);
-  TMultiGraph *mg = new TMultiGraph();
-  TMultiGraph *mg2 = new TMultiGraph();
-  TMultiGraph *mg3 = new TMultiGraph();
-  TMultiGraph *mg4 = new TMultiGraph();
-  TMultiGraph *mg5 = new TMultiGraph();
-  TMultiGraph *mg6 = new TMultiGraph();
-  TMultiGraph *mg7 = new TMultiGraph();
-  TMultiGraph *mg8 = new TMultiGraph();
-  TMultiGraph *mg9 = new TMultiGraph();
+  //outputFile->Write();
+  outputFile->Close();
 
-  for (int k{0}; k<3; ++k) {
-    graph[k]->SetMarkerColor(colors[k]);
-    graph[k]->SetMarkerStyle(21);
-    mg->Add(graph[k]);
-    gAlpha[k]->SetMarkerColor(colors[k]);
-    gAlpha[k]->SetMarkerStyle(21);
-    mg3->Add(gAlpha[k]);
-    gK[k]->SetMarkerColor(colors[k]);
-    gK[k]->SetMarkerStyle(21);
-    mg4->Add(gK[k]);
-    gEn[k]->SetMarkerColor(colors[k]);
-    gEn[k]->SetMarkerStyle(21);
-    mg5->Add(gEn[k]);
-    gErr[k]->SetMarkerColor(colors[k]);
-    gErr[k]->SetMarkerStyle(21);
-    mg6->Add(gErr[k]);
-    gEnrel[k]->SetMarkerColor(colors[k]);
-    gEnrel[k]->SetMarkerStyle(21);
-    mg7->Add(gEnrel[k]);
-    gUS[k]->SetMarkerColor(colors[k]);
-    gUS[k]->SetMarkerStyle(21);
-    mg9->Add(gUS[k]);
-  }
-  for (int k{0}; k<NENERGIES; ++k) {
-    graph2[k]->SetMarkerColor(colors[k]);
-    graph2[k]->SetMarkerStyle(21);
-    mg2->Add(graph2[k]);
-    gRatio[k]->SetMarkerColor(colors[k]);
-    gRatio[k]->SetMarkerStyle(21);
-    mg8->Add(gRatio[k]);
-  }
-  c1->cd();
-  mg->GetXaxis()->SetTitle("pion energy (GeV)");
-  mg->GetYaxis()->SetTitle("mean Scifi QDC (a.u.)");
-  mg->GetXaxis()->SetLimits(50,350);
-  mg->SetMinimum(0.);
-  mg->SetMaximum(5000.);
-  mg->Draw("ape");
-  c1->BuildLegend();
-  c2->cd();
-  mg2->GetXaxis()->SetTitle("shower start");
-  mg2->GetYaxis()->SetTitle("mean Scifi QDC (a.u.)");
-  mg2->GetXaxis()->SetLimits(1.5,4.5);
-  mg2->SetMinimum(0.);
-  mg2->SetMaximum(5000.);
-  mg2->Draw("ape");
-  c2->BuildLegend();
-  c3->cd();
-  mg3->GetXaxis()->SetTitle("pion energy (GeV)");
-  mg3->GetYaxis()->SetTitle("Alpha (GeV/QDC)");
-  mg3->GetXaxis()->SetLimits(50,350);
-  mg3->SetMinimum(-0.002);
-  mg3->SetMaximum(0.025);
-  mg3->Draw("ape");
-  c3->BuildLegend();
-  c4->cd();
-  mg4->GetXaxis()->SetTitle("pion energy (GeV)");
-  mg4->GetYaxis()->SetTitle("K (GeV/QDC)");
-  mg4->GetXaxis()->SetLimits(50,350);
-  mg4->SetMinimum(0.03);
-  mg4->SetMaximum(0.15);
-  mg4->Draw("ape");
-  c4->BuildLegend();
-  c5->cd();
-  mg5->GetXaxis()->SetTitle("pion energy (GeV)");
-  mg5->GetYaxis()->SetTitle("E_reco - E (GeV)");
-  mg5->GetXaxis()->SetLimits(50,350);
-  mg5->SetMinimum(-100);
-  mg5->SetMaximum(100);
-  mg5->Draw("ape");
-  c5->BuildLegend();
-  line->Draw("same");
-  c6->cd();
-  mg6->GetXaxis()->SetTitle("pion energy (GeV)");
-  mg6->GetYaxis()->SetTitle("Resolution %");
-  mg6->GetXaxis()->SetLimits(50,350);
-  mg6->SetMinimum(0);
-  mg6->SetMaximum(40);
-  mg6->Draw("ape");
-  c6->BuildLegend();
-  c7->cd();
-  mg7->GetXaxis()->SetTitle("pion energy (GeV)");
-  mg7->GetYaxis()->SetTitle("(E_reco - E)/E %");
-  mg7->GetXaxis()->SetLimits(50,350);
-  mg7->SetMinimum(-100);
-  mg7->SetMaximum(100);
-  mg7->Draw("ape");
-  c7->BuildLegend();
-  line->Draw("same");
-  c8->cd();
-  mg8->GetXaxis()->SetTitle("shower start");
-  mg8->GetYaxis()->SetTitle("Scifi/E_reco (a.u.)");
-  mg8->GetXaxis()->SetLimits(0.5,3.5);
-  mg8->SetMinimum(0.0);
-  mg8->SetMaximum(1.0);
-  mg8->Draw("ape");
-  c8->BuildLegend();
-  c9->cd();
-  mg9->GetXaxis()->SetTitle("pion energy (GeV)");
-  mg9->GetYaxis()->SetTitle("mean US QDC (a.u.)");
-  mg9->GetXaxis()->SetLimits(50,350);
-  mg9->SetMinimum(0.0);
-  mg9->SetMaximum(14000.0);
-  mg9->Draw("ape");
-  c9->BuildLegend();
-  cRatioEn->cd();
-  hRatioEn->Draw("colz");
-  gStyle->SetOptStat("ne");
-  outf->cd();
-  c1->Write();
-  c2->Write();
-  c3->Write();
-  c4->Write();
-  c5->Write();
-  c6->Write();
-  c7->Write();
-  c8->Write();
-  c9->Write();
-  hRatioEn->Write();
-
-  outf->Close();
-  std::cout<<"k:\t"<<mean_k<<"\na:\t"<<mean_a<<"\n";
 }

@@ -11,87 +11,57 @@
 
 #include "TChain.h"
 #include "TClonesArray.h"
+#include "SNDLHCEventHeaderConst.h"
+#include "./libs/Inclusion.h"
+#include "./libs/SciFiPlaneView.h"
+#include "./libs/USPlaneView.h"
 
-//*****************************************************
-// Configuration
-//*****************************************************
+cfg setCfg( bool istb, int runN ) {
+  cfg config;
+  if (istb) {
+    config.SCIFI_STATIONS = 4;
+    config.SCIFI_BOARDPERPLANE = 1;
+    config.SCIFI_NCHANNELS = 512;
+    config.SCIFI_TIMECUT = 1;  
+    config.SCIFI_DIMCLUSTER = 35;
+    config.SCIFI_GAPCLUSTER = 2;
+    config.SCIFI_DENSITYWINDOW = 128;
+    config.SCIFI_DENSITYHITS = 36;
+    config.SCIFI_F = 0.17; 
 
-const double FREQ{160.316E6};
-const double TDC2ns = 1E9 / FREQ;
-const int NSIPM{8};
-const int NSIDE{2};
-const int NsidesNch{16};
-const int TOFPETperBOARD{8};
-const int TOFPETCHANNELS{64};
+    config.US_STATIONS = 5;
+    config.US_TIMECUT = 3;
 
-struct config_t {
-  int SCIFISTATION{-1};
-  int MUSTATION{-1};
-  int NWALLS{-1};
-  int SCIFITHRESHOLD{-1};
-  int SCIFIMAXGAP{-1};
-  int SCIFISIDECUT{-1};
-  int SCIFIMINHITS{999};
-  int MUMINHITS{999};
-  int BOARDPERSTATION{-1};
+    config.SCIFI_DIM = 13;
 
-  double TIMECUT{-1};
-
-  // geometry parameters
-  double SCIFIDIM{-1};
-}
-
-static constexpr config_t config_tb{4, 5, 3, 35, 5, 30, 30, 5, 1, 1, 13};
-static constexpr config_t config_ti18{5, 8, 5, 56, -1, -1, 2, 2, 3, -1, -1};
-
-std::shared_ptr<config_t> get_config(bool is_tb) {
-  if (is_tb) {
-    return std::make_shared<config_t>(config_tb);
-  } else {
-    return std::make_shared<config_t>(config_ti18);
+    config.INFILENAME = "root://eospublic.cern.ch//eos/experiment/sndlhc/convertedData/commissioning/testbeam_June2023_H8/";
+    config.OUTFILENAME = "output/TB_output";
   }
-}
+  else {
+    config.SCIFI_STATIONS = 5;
+    config.SCIFI_BOARDPERPLANE = 3;
+    config.SCIFI_NCHANNELS = 512*3;
+    config.SCIFI_TIMECUT = 1;  
+    config.SCIFI_DIMCLUSTER = 18;
+    config.SCIFI_GAPCLUSTER = 2;
+    config.SCIFI_DENSITYWINDOW = 128;
+    config.SCIFI_DENSITYHITS = 18;
+    config.SCIFI_F = 0.17;
 
-//*****************************************************
-// Helper class handling single SciFi planes
-//*****************************************************
+    config.US_STATIONS = 5;
+    config.US_TIMECUT = 3;
 
-class SciFiPlaneView {
-
-  int begin{};
-  int end{};
-  int station{};
-
-  TClonesArray *sf_hits{nullptr};
-  std::shared_ptr<config_t> cfg;
-
-public:
-  template <class T> struct xy_pair {
-    T x{};
-    T y{};
-  };
-
-  SciFiPlaneView(std::shared_ptr<config_t> c, TClonesArray *h, int b, int e,
-                 int s)
-      : cfg(c), sf_hits(h), begin(b), end(e), station(s) {
-    if (b > e) {
-      throw std::runtime_error{"Begin index > end index"};
+    config.SCIFI_DIM = 13*3;
+    if (runN < 5422) {
+      config.INFILENAME = "root://eospublic.cern.ch//eos/experiment/sndlhc/convertedData/physics/2022/";
     }
-  }
-
-  auto sizes() const {
-    xy_pair<int> counts{0, 0};
-
-    for (int i{begin}; i < end; ++i) {
-      if (static_cast<sndScifiHit *>(sf_hits->At(i))->isVertical()) {
-        ++counts.y;
-      } else {
-        ++counts.x;
-      }
+    else {
+      config.INFILENAME = "root://eospublic.cern.ch//eos/experiment/sndlhc/convertedData/physics/2023/";
     }
-    return counts;
+    config.OUTFILENAME = "output/TI18_output";
   }
-};
+  return config;
+}
 
 //*****************************************************
 // Skim function:
@@ -101,54 +71,121 @@ public:
 // - that the cut is base donly on SciFi hits
 // - that they come sorted by station in the TClonesArray
 //*****************************************************
-
-bool skim_function(std::shared_ptr<config_t> cfg, TClonesArray *sf_hits) {
+std::vector<SciFiPlaneView> fillSciFi(cfg configuration, TClonesArray *sf_hits){
 
   std::vector<SciFiPlaneView> scifi_planes;
 
-  int begin{};
-  int count{};
+  int begin{0};
+  int count{0};
 
   int n_sf_hits{sf_hits->GetEntries()};
 
-  for (int st{1}; st <= cfg->SCIFISTATION; ++st) {
-
+  for (int st{1}; st <= configuration.SCIFI_STATIONS; ++st) {
+    begin = count;
     while (count < n_sf_hits &&
            st == static_cast<sndScifiHit *>(sf_hits->At(count))->GetStation()) {
       ++count;
     }
 
-    scifi_planes.emplace_back(SciFiPlaneView(cfg, sf_hits, begin, count, st));
+    auto plane = SciFiPlaneView(configuration, sf_hits, begin, count, st);
+    scifi_planes.emplace_back(plane);
   }
 
-  std::vector<SciFiPlaneView::xy_pair<int>> sizes_by_plane{scifi_planes.size()};
-  std::transform(scifi_planes.begin(), scifi_planes.end(),
-                 sizes_by_plane.begin(),
-                 [](const auto &plane) { return plane.sizes(); });
+  return scifi_planes;
+}
 
-  if (sizes_by_plane[0].x != 1 || sizes_by_plane[0].y != 1) {
-    return false;
+bool vetoCut(TClonesArray *mufi_hits){
+
+  int n_mufi_hits{mufi_hits->GetEntries()};
+  int system{0};
+  // skip veto/beam monitor
+  for (int i{0}; i<n_mufi_hits && system<2; ++i){
+    system = static_cast<MuFilterHit *>(mufi_hits->At(i))->GetSystem();
+    if (system == 1) return false;
+  }
+  return true;
+}
+
+bool isOneVetoHit(TClonesArray *mufi_hits){
+
+  int n_mufi_hits{mufi_hits->GetEntries()};
+  int system{0};
+  int n_hits{0};
+  // skip veto/beam monitor
+  for (int i{0}; i<n_mufi_hits && system<2; ++i){
+    system = static_cast<MuFilterHit *>(mufi_hits->At(i))->GetSystem();
+    if (system == 1) {
+      n_hits++;
+      if (n_hits>1) return false;
+    }
+  }
+  return n_hits==1 ? true : false;
+}
+
+bool isStableBeam(SNDLHCEventHeader *header){
+
+  return (header->GetBeamMode() == static_cast<int>(LhcBeamMode::StableBeams)) ? true : false;
+}
+
+void timeCutGuil (std::vector<SciFiPlaneView> &Scifi) {
+  TH1D* times = new TH1D ("times", "times; clk cycles; entries", 1000, 0, 50);
+
+  for (auto &plane : Scifi) {
+    auto time = plane.getTime();
+    for (int i{0}; i<time.x.size(); ++i) {
+      if (time.x[i]>DEFAULT) {
+        times->Fill(time.x[i]);
+      }
+      if (time.y[i]>DEFAULT) {
+        times->Fill(time.y[i]);
+      }
+    }
   }
 
-  return std::any_of(std::next(sizes_by_plane.begin()), sizes_by_plane.end(),
-                     [cfg](const auto &sizes) {
-                       return sizes.x > cfg->SCIFIMINHITS &&
-                              sizes.y > cfg->SCIFIMINHITS;
-                     });
+  double referenceTime = times->GetXaxis()->GetBinCenter(times->GetMaximumBin()); // in clk cycles
+
+  for (auto &plane : Scifi) {
+    plane.timeCut(referenceTime - 0.5, referenceTime + 0.5);
+  }
+
+  delete times;
+}
+
+int checkShower_with_density(std::vector<SciFiPlaneView> scifi_planes ) {
+  //find start of shower
+  for (auto &plane : scifi_planes) {
+    if (plane.infoDensity(plane.getConfig().SCIFI_DENSITYWINDOW, plane.getConfig().SCIFI_DENSITYHITS)) return plane.getStation();
+  }
+  return -1;
+}
+
+bool skim_function(cfg configuration, SNDLHCEventHeader *header, TClonesArray *sf_hits, TClonesArray *mufi_hits) {
+  // Stable beam
+  if (!isStableBeam(header)) return false;
+  // No hit in Veto
+  if (!vetoCut(mufi_hits)) return false;
+  // One hit in Veto
+  // if (!isOneVetoHit(mufi_hits)) return false;
+  // Shower tagged
+  auto scifi_planes = fillSciFi(configuration, sf_hits);
+  timeCutGuil(scifi_planes);
+  if (checkShower_with_density(scifi_planes) == -1) return false;
+
+  return true;
 };
 
 //*****************************************************
 // Steering function called by run_skim.sh
 //*****************************************************
 
-void skim(std::string file_name, std::string out_folder, bool isTB) {
+void skim(std::string file_name, int run_number, std::string out_folder, bool isTB) {
 
   auto start = std::chrono::steady_clock::now();
 
   std::cout << "[skim] processing: " << file_name << std::endl;
 
   // ##################### Set right parameters for data type (TB/TI18)
-  const auto cfg = get_config(isTB);
+  cfg configuration = setCfg(isTB, run_number); 
 
   // ##################### Read input file #####################
   auto tree = new TChain("rawConv");
@@ -158,7 +195,12 @@ void skim(std::string file_name, std::string out_folder, bool isTB) {
   auto sf_hits = new TClonesArray("sndScifiHit");
   auto mu_hits = new TClonesArray("MuFilterHit");
 
-  tree->SetBranchAddress("EventHeader.", &header);
+  if (!isTB && run_number<5422){
+    tree->SetBranchAddress("EventHeader", &header);
+  }
+  else {
+    tree->SetBranchAddress("EventHeader.", &header);
+  }
   tree->SetBranchAddress("Digi_ScifiHits", &sf_hits);
   tree->SetBranchAddress("Digi_MuFilterHits", &mu_hits);
 
@@ -180,7 +222,7 @@ void skim(std::string file_name, std::string out_folder, bool isTB) {
 
     tree->GetEntry(i);
 
-    if (skim_function(cfg, sf_hits)) {
+    if (skim_function(configuration, header, sf_hits, mu_hits)) {
       new_tree->Fill();
     }
   }
